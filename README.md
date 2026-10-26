@@ -12,6 +12,10 @@ Views
 - **Kontrola**: data checks (impossible dates, parent/child age problems, duplicates with one-click merge, unnamed people, broken links), per-issue ignore.
 - **Narzędzia**: kinship calculator, upcoming birthdays, exports: full `.ged`, `.ged` without living people (anonymised), CSV for Excel.
 
+- **Oś czasu**: whole-family timeline (births, deaths, marriages, custom events) with a historical background (PL/world), and a life-lines chart (bars birth to death, filter by years and surname).
+- **Zdjęcia** (per person tab): photos stored in the browser (IndexedDB), downscaled to 1600 px, primary photo used as avatar. Backup as `.zip` (GEDCOM + photos); the ZIP also contains a standards-only GEDCOM for Ahnenblatt/MyHeritage.
+- **Miejsca**: place list with rename-everywhere, optional coordinates, schematic map. **Źródła**: sources and research tasks. Person events (occupation, residence, baptism, burial, ...) edited on the person card. Printable reports (index, family sheet), find and replace with preview.
+
 Other: undo/redo (Ctrl+Z / Ctrl+Y), dark mode, keyboard shortcuts (`/`, `g o|t|s|k|n`), offline/installable (service worker + manifest), strict CSP.
 
 GEDCOM: import UTF-8/UTF-16/ANSI (Windows-1250/1252), export 5.5.1 UTF-8, lossless for data the editor does not touch (media, burial, custom tags, extra names).
@@ -30,4 +34,5 @@ No real family data in this repo (`.gitignore` blocks `*.ged`, `*.ahn`, JSON dum
 2. Person editor, ancestor/descendant charts, SVG/print (done)
 3. Statistics, data checks, merge, anonymised export, whole-family chart (done)
 4. Cloudflare Access login + D1 storage (needs Access enabled on the account)
-4. Media, sources, places, more formats (CSV, JSON)
+5. Timeline, photos, places, sources, tasks, events, ZIP backup (done)
+6. Next: Access login, D1 sync (photos to R2), map tiles for places, relationship-based reports
