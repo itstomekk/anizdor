@@ -1,0 +1,15 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+# Family data never goes into the repo. Only fixtures/sample.ged (fictional) is allowed.
+*.ged
+*.gedcom
+*.ahn
+*.gramps
+people.json
+anchors.json
+segs.json
+data/
+!fixtures/sample.ged
+HANDOFF.md

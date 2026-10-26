@@ -1,0 +1,11 @@
+{
+  "name": "rodzina-tablica",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Private family-tree app: GEDCOM (.ged) import/export, Cloudflare Pages + Access.",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "dev": "npx wrangler pages dev public"
+  }
+}

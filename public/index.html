@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Rodzina: drzewo</title>
+<style>
+  body { font: 16px system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  th, td { border-bottom: 1px solid #ddd; padding: .35rem .5rem; text-align: left; }
+  button, input[type=file] { margin-right: .5rem; }
+  #msg { color: #555; margin-top: .5rem; }
+</style>
+</head>
+<body>
+<h1>Rodzina: drzewo</h1>
+<p>Wczytaj plik <b>.ged</b> (GEDCOM z Ahnenblatt, MyHeritage, Gramps i innych). Dane zostają w Twojej przeglądarce.</p>
+<input id="file" type="file" accept=".ged,.gedcom,text/plain">
+<button id="export" disabled>Pobierz .ged</button>
+<div id="msg"></div>
+<table id="tbl" hidden><thead><tr><th>ID</th><th>Imię</th><th>Nazwisko</th><th>Ur.</th><th>Zm.</th></tr></thead><tbody></tbody></table>
+<script type="module">
+import { decodeGedcom, parseGedcom, serializeGedcom, validate } from './gedcom.js';
+let model = null;
+const $ = (id) => document.getElementById(id);
+$('file').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  model = parseGedcom(decodeGedcom(new Uint8Array(await f.arrayBuffer())));
+  const bad = validate(model);
+  $('msg').textContent = `${Object.keys(model.persons).length} osób, ${Object.keys(model.families).length} rodzin` + (bad.length ? `, ostrzeżeń: ${bad.length}` : '');
+  const tb = $('tbl').querySelector('tbody'); tb.replaceChildren();
+  for (const p of Object.values(model.persons)) {
+    const tr = tb.insertRow();
+    for (const t of [p.id, p.given, p.surname, p.birth.date, p.death.date]) tr.insertCell().textContent = t;
+  }
+  $('tbl').hidden = false; $('export').disabled = false;
+});
+$('export').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([serializeGedcom(model)], { type: 'text/plain;charset=utf-8' }));
+  a.download = 'rodzina.ged'; a.click();
+});
+</script>
+</body>
+</html>
