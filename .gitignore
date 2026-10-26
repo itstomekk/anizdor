@@ -11,5 +11,5 @@ people.json
 anchors.json
 segs.json
 data/
-!fixtures/sample.ged
+!fixtures/*.ged
 HANDOFF.md
