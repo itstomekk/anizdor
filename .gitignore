@@ -12,4 +12,5 @@ anchors.json
 segs.json
 data/
 !fixtures/*.ged
+!public/demo.ged
 HANDOFF.md
