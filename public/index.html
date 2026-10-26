@@ -5,42 +5,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Rodzina: drzewo</title>
-<style>
-  body { font: 16px system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
-  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-  th, td { border-bottom: 1px solid #ddd; padding: .35rem .5rem; text-align: left; }
-  button, input[type=file] { margin-right: .5rem; }
-  #msg { color: #555; margin-top: .5rem; }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>Rodzina: drzewo</h1>
-<p>Wczytaj plik <b>.ged</b> (GEDCOM z Ahnenblatt, MyHeritage, Gramps i innych). Dane zostają w Twojej przeglądarce.</p>
-<input id="file" type="file" accept=".ged,.gedcom,text/plain">
-<button id="export" disabled>Pobierz .ged</button>
-<div id="msg"></div>
-<table id="tbl" hidden><thead><tr><th>ID</th><th>Imię</th><th>Nazwisko</th><th>Ur.</th><th>Zm.</th></tr></thead><tbody></tbody></table>
-<script type="module">
-import { decodeGedcom, parseGedcom, serializeGedcom, validate } from './gedcom.js';
-let model = null;
-const $ = (id) => document.getElementById(id);
-$('file').addEventListener('change', async (e) => {
-  const f = e.target.files[0]; if (!f) return;
-  model = parseGedcom(decodeGedcom(new Uint8Array(await f.arrayBuffer())));
-  const bad = validate(model);
-  $('msg').textContent = `${Object.keys(model.persons).length} osób, ${Object.keys(model.families).length} rodzin` + (bad.length ? `, ostrzeżeń: ${bad.length}` : '');
-  const tb = $('tbl').querySelector('tbody'); tb.replaceChildren();
-  for (const p of Object.values(model.persons)) {
-    const tr = tb.insertRow();
-    for (const t of [p.id, p.given, p.surname, p.birth.date, p.death.date]) tr.insertCell().textContent = t;
-  }
-  $('tbl').hidden = false; $('export').disabled = false;
-});
-$('export').addEventListener('click', () => {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([serializeGedcom(model)], { type: 'text/plain;charset=utf-8' }));
-  a.download = 'rodzina.ged'; a.click();
-});
-</script>
+<header>
+  <h1>Rodzina</h1>
+  <div class="actions">
+    <label class="btn">Wczytaj .ged<input id="file" type="file" accept=".ged,.gedcom,text/plain" hidden></label>
+    <button id="export" disabled>Pobierz .ged</button>
+    <button id="new">+ Osoba</button>
+    <button id="wipe" class="ghost" disabled>Usuń dane z przeglądarki</button>
+  </div>
+</header>
+<div id="msg" role="status"></div>
+<main>
+  <aside>
+    <input id="q" type="search" placeholder="Szukaj osoby…" autocomplete="off">
+    <ul id="list"></ul>
+  </aside>
+  <section id="view">
+    <div id="empty">
+      <h2>Zacznij od pliku .ged</h2>
+      <p>Wczytaj GEDCOM z Ahnenblatt, MyHeritage, Gramps lub innego programu. Dane zostają w tej przeglądarce i nie są wysyłane na żaden serwer.</p>
+    </div>
+    <div id="person" hidden>
+      <nav class="tabs">
+        <button data-tab="info" class="on">Osoba</button>
+        <button data-tab="anc">Przodkowie</button>
+        <button data-tab="desc">Potomkowie</button>
+      </nav>
+      <div id="tab-info"></div>
+      <div id="tab-tree" hidden>
+        <div class="treebar">
+          <label>Pokolenia <select id="gens"><option>3</option><option selected>5</option><option>7</option><option>9</option></select></label>
+          <button id="svg">Pobierz SVG</button>
+          <button id="print">Drukuj / PDF</button>
+        </div>
+        <div id="canvas"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
 </body>
 </html>
