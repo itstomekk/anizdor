@@ -61,7 +61,9 @@ export function parseGedcom(text) {
   const persons = {};
   const families = {};
   const header = {};
+  const other = []; // HEAD, SUBM, OBJE, SOUR, _PUBLISH, TRLR-less extras: kept verbatim
   for (const n of tree) {
+    if (n.tag !== 'INDI' && n.tag !== 'FAM' && n.tag !== 'TRLR') other.push(n);
     if (n.tag === 'HEAD') {
       header.source = val(child(n, 'SOUR') || { children: [] }, 'NAME') || val(n, 'SOUR');
       header.charset = val(n, 'CHAR');
@@ -75,6 +77,7 @@ export function parseGedcom(text) {
         famc: childs(n, 'FAMC').map((c) => c.value),
         fams: childs(n, 'FAMS').map((c) => c.value),
         notes: childs(n, 'NOTE').map((c) => c.value),
+        _raw: n,
       };
     } else if (n.tag === 'FAM' && n.xref) {
       families[n.xref] = {
@@ -82,10 +85,11 @@ export function parseGedcom(text) {
         husband: val(n, 'HUSB'), wife: val(n, 'WIFE'),
         children: childs(n, 'CHIL').map((c) => c.value),
         marriage: eventOf(n, 'MARR'),
+        _raw: n,
       };
     }
   }
-  return { header, persons, families };
+  return { header, persons, families, other };
 }
 
 function emit(level, tag, value, out) {
@@ -102,30 +106,82 @@ function emit(level, tag, value, out) {
   for (const p of parts) out.push(`${level + 1} CONT ${p}`);
 }
 
-/** Serialize the data model back to GEDCOM 5.5.1, UTF-8. */
+const KEEP_HEAD = new Set(['CHAR']);
+
+function emitNode(n, level, out) {
+  emit(level, (n.xref ? n.xref + ' ' : '') + n.tag, n.value, out);
+  for (const c of n.children) emitNode(c, level + 1, out);
+}
+
+// Event with edited DATE/PLAC; any other sub-tags (SOUR, _UPD, ADDR...) from the original are kept.
+function emitEvent(level, tag, e, raw, out) {
+  const extra = raw ? raw.children.filter((c) => c.tag !== 'DATE' && c.tag !== 'PLAC') : [];
+  if (!raw && (!e || (!e.date && !e.place)) ) return;
+  if (raw && !extra.length && (!e || (!e.date && !e.place)) && !raw.value) { out.push(`${level} ${tag}`); return; }
+  emit(level, tag, raw ? raw.value : '', out);
+  if (e?.date) emit(level + 1, 'DATE', e.date, out);
+  if (e?.place) emit(level + 1, 'PLAC', e.place, out);
+  for (const c of extra) emitNode(c, level + 1, out);
+}
+
+/** Serialize the model back to GEDCOM 5.5.1 UTF-8. Data the model does not edit (media, burial, custom tags) is kept verbatim. */
 export function serializeGedcom(model, { source = 'rodzina-tablica' } = {}) {
-  const out = ['0 HEAD', `1 SOUR ${source}`, '1 GEDC', '2 VERS 5.5.1', '2 FORM LINEAGE-LINKED', '1 CHAR UTF-8'];
-  const ev = (level, tag, e) => {
-    if (!e || (!e.date && !e.place)) return;
-    out.push(`${level} ${tag}`);
-    if (e.date) emit(level + 1, 'DATE', e.date, out);
-    if (e.place) emit(level + 1, 'PLAC', e.place, out);
-  };
+  const out = [];
+  const head = (model.other || []).find((n) => n.tag === 'HEAD');
+  if (head) {
+    out.push('0 HEAD');
+    let sawChar = false;
+    for (const c of head.children) {
+      if (c.tag === 'CHAR') { out.push('1 CHAR UTF-8'); sawChar = true; } else emitNode(c, 1, out);
+    }
+    if (!sawChar) out.push('1 CHAR UTF-8');
+  } else {
+    out.push('0 HEAD', `1 SOUR ${source}`, '1 GEDC', '2 VERS 5.5.1', '2 FORM LINEAGE-LINKED', '1 CHAR UTF-8');
+  }
+  for (const n of (model.other || [])) if (n.tag !== 'HEAD') emitNode(n, 0, out);
+
   for (const p of Object.values(model.persons)) {
+    const raw = p._raw;
     out.push(`0 ${p.id} INDI`);
-    out.push(`1 NAME ${p.given || ''} /${p.surname || ''}/${p.suffix ? ' ' + p.suffix : ''}`);
+    // first NAME is edited from the model (keeping its sub-tags); further NAMEs stay verbatim
+    const nameRaw = raw?.children.find((c) => c.tag === 'NAME');
+    const orig = nameRaw ? splitName(nameRaw.value) : null;
+    const unchanged = orig && orig.given === (p.given || '') && orig.surname === (p.surname || '') && orig.suffix === (p.suffix || '');
+    if (unchanged) emit(1, 'NAME', nameRaw.value, out);
+    else if (nameRaw || p.given || p.surname || p.suffix) out.push(`1 NAME ${p.given || ''} /${p.surname || ''}/${p.suffix ? ' ' + p.suffix : ''}`);
+    for (const c of nameRaw ? nameRaw.children : []) emitNode(c, 2, out);
     if (p.sex) out.push(`1 SEX ${p.sex}`);
-    ev(1, 'BIRT', p.birth); ev(1, 'DEAT', p.death);
+    emitEvent(1, 'BIRT', p.birth, raw?.children.find((c) => c.tag === 'BIRT'), out);
+    emitEvent(1, 'DEAT', p.death, raw?.children.find((c) => c.tag === 'DEAT'), out);
     for (const f of p.famc || []) out.push(`1 FAMC ${f}`);
     for (const f of p.fams || []) out.push(`1 FAMS ${f}`);
     for (const n of p.notes || []) emit(1, 'NOTE', n, out);
+    if (raw) {
+      let seenName = false, seenBirt = false, seenDeat = false;
+      for (const c of raw.children) {
+        if (c.tag === 'NAME' && !seenName) { seenName = true; continue; }
+        if (c.tag === 'BIRT' && !seenBirt) { seenBirt = true; continue; }
+        if (c.tag === 'DEAT' && !seenDeat) { seenDeat = true; continue; }
+        if (['SEX', 'FAMC', 'FAMS', 'NOTE'].includes(c.tag)) continue;
+        emitNode(c, 1, out);
+      }
+    }
   }
   for (const f of Object.values(model.families)) {
+    const raw = f._raw;
     out.push(`0 ${f.id} FAM`);
     if (f.husband) out.push(`1 HUSB ${f.husband}`);
     if (f.wife) out.push(`1 WIFE ${f.wife}`);
     for (const c of f.children || []) out.push(`1 CHIL ${c}`);
-    ev(1, 'MARR', f.marriage);
+    emitEvent(1, 'MARR', f.marriage, raw?.children.find((c) => c.tag === 'MARR'), out);
+    if (raw) {
+      let seenMarr = false;
+      for (const c of raw.children) {
+        if (c.tag === 'MARR' && !seenMarr) { seenMarr = true; continue; }
+        if (['HUSB', 'WIFE', 'CHIL'].includes(c.tag)) continue;
+        emitNode(c, 1, out);
+      }
+    }
   }
   out.push('0 TRLR');
   return out.join('\r\n') + '\r\n';

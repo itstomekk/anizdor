@@ -44,3 +44,48 @@ test('UTF-8 BOM is stripped', () => {
   const bytes = Uint8Array.from([0xef, 0xbb, 0xbf, ...body]);
   assert.equal(parseGedcom(decodeGedcom(bytes)).persons['@I1@'].surname, 'B');
 });
+
+import { existsSync } from 'node:fs';
+import { parseTree } from '../public/gedcom.js';
+
+// Canonical, order-independent view of a GEDCOM: one sorted line list per level-0 record.
+function canon(text) {
+  const rec = {};
+  const walk = (n, path, acc) => {
+    const p = `${path}/${n.tag}`;
+    acc.push(`${p}=${n.value}`);
+    for (const c of n.children) walk(c, p, acc);
+  };
+  for (const n of parseTree(text)) {
+    const acc = [];
+    for (const c of n.children) walk(c, '', acc);
+    rec[`${n.xref || ''}${n.tag}`] = acc.sort();
+  }
+  return rec;
+}
+
+test('lossless: custom tags, media, burial, extra names survive', () => {
+  const src = decodeGedcom(readFileSync(new URL('../fixtures/sample-rich.ged', import.meta.url)));
+  const out = serializeGedcom(parseGedcom(src));
+  assert.deepEqual(canon(out), canon(src));
+});
+
+test('edits are applied and the rest is kept', () => {
+  const src = decodeGedcom(readFileSync(new URL('../fixtures/sample-rich.ged', import.meta.url)));
+  const m = parseGedcom(src);
+  m.persons['@I1@'].birth.date = '2 FEB 1901';
+  const out = serializeGedcom(m);
+  assert.match(out, /2 DATE 2 FEB 1901/);
+  assert.match(out, /1 OBJE\r\n2 FILE photo.jpg/);
+  assert.match(out, /2 SOUR @S1@/);
+  assert.match(out, /1 NAME Maria \/Panienska\//);
+});
+
+const priv = new URL('../data/kolodziejczuki-myheritage-2026-06-04.ged', import.meta.url);
+test('lossless on the real private file (skipped when absent)', { skip: !existsSync(priv) }, () => {
+  const src = decodeGedcom(readFileSync(priv));
+  const out = serializeGedcom(parseGedcom(src));
+  const a = canon(src), b = canon(out);
+  assert.deepEqual(Object.keys(b).sort(), Object.keys(a).sort());
+  for (const k of Object.keys(a)) assert.deepEqual(b[k], a[k], k);
+});
