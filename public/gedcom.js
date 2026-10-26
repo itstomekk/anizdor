@@ -41,6 +41,8 @@ export function parseTree(text) {
   return roots;
 }
 
+// Events beyond BIRT/DEAT that the app edits itself. Other event tags stay verbatim in _raw.
+export const EDIT_EVENTS = ['BAPM', 'CHR', 'CONF', 'FCOM', 'BURI', 'CREM', 'RESI', 'OCCU', 'EDUC', 'GRAD', 'MILI', 'EMIG', 'IMMI', 'NATU', 'RETI', 'PROB', 'WILL', 'EVEN'];
 const child = (n, tag) => n.children.find((c) => c.tag === tag);
 const childs = (n, tag) => n.children.filter((c) => c.tag === tag);
 const val = (n, tag) => child(n, tag)?.value ?? '';
@@ -61,9 +63,13 @@ export function parseGedcom(text) {
   const persons = {};
   const families = {};
   const header = {};
-  const other = []; // HEAD, SUBM, OBJE, SOUR, _PUBLISH, TRLR-less extras: kept verbatim
+  const other = []; // HEAD, SUBM, OBJE, _PUBLISH, ...: kept verbatim
+  const ext = { sources: {}, tasks: [], places: {} };
   for (const n of tree) {
-    if (n.tag !== 'INDI' && n.tag !== 'FAM' && n.tag !== 'TRLR') other.push(n);
+    if (n.tag === 'SOUR' && n.xref) ext.sources[n.xref] = { id: n.xref, title: val(n, 'TITL'), author: val(n, 'AUTH'), note: val(n, 'NOTE'), url: val(n, 'WWW') || val(n, '_URL') };
+    else if (n.tag === '_RT_TASK') ext.tasks.push({ id: n.xref || n.value, text: val(n, 'TEXT'), done: val(n, 'DONE') === 'Y', person: val(n, 'INDI'), created: val(n, 'DATE') });
+    else if (n.tag === '_RT_PLACE') ext.places[val(n, 'NAME')] = { lat: +val(n, 'LATI'), lng: +val(n, 'LONG') };
+    else if (n.tag !== 'INDI' && n.tag !== 'FAM' && n.tag !== 'TRLR') other.push(n);
     if (n.tag === 'HEAD') {
       header.source = val(child(n, 'SOUR') || { children: [] }, 'NAME') || val(n, 'SOUR');
       header.charset = val(n, 'CHAR');
@@ -77,6 +83,12 @@ export function parseGedcom(text) {
         famc: childs(n, 'FAMC').map((c) => c.value),
         fams: childs(n, 'FAMS').map((c) => c.value),
         notes: childs(n, 'NOTE').map((c) => c.value),
+        events: n.children.filter((c) => EDIT_EVENTS.includes(c.tag) && !(c.tag === 'RESI' && c.children.some((x) => x.tag === 'EMAIL' || x.tag === 'ADDR'))).map((c, i) => ({
+          id: `e${i}`, type: c.tag === 'EVEN' ? 'EVEN' : c.tag, label: c.tag === 'EVEN' ? val(c, 'TYPE') : '', value: c.value, date: val(c, 'DATE'), place: val(c, 'PLAC'), note: val(c, 'NOTE'),
+          sources: childs(c, 'SOUR').map((x) => x.value).filter((v) => /^@/.test(v)), tag: c, 
+        })),
+        sources: childs(n, 'SOUR').map((c) => c.value).filter((v) => /^@/.test(v)),
+        photos: childs(n, '_RT_PHOTO').map((c) => ({ id: c.value, title: val(c, 'TITL'), mime: val(c, 'FORM') || 'image/jpeg', w: +val(c, 'WIDTH') || 0, h: +val(c, 'HEIGHT') || 0, primary: val(c, '_PRIM') === 'Y' })),
         _raw: n,
       };
     } else if (n.tag === 'FAM' && n.xref) {
@@ -89,7 +101,7 @@ export function parseGedcom(text) {
       };
     }
   }
-  return { header, persons, families, other };
+  return { header, persons, families, other, ext };
 }
 
 function emit(level, tag, value, out) {
@@ -124,8 +136,21 @@ function emitEvent(level, tag, e, raw, out) {
   for (const c of extra) emitNode(c, level + 1, out);
 }
 
+// A person event from the editable list. Sub-tags we do not know (_UID, RIN, ...) of an imported event are kept.
+function emitExtraEvent(e, out) {
+  const known = new Set(['DATE', 'PLAC', 'NOTE', 'SOUR', 'TYPE']);
+  const tag = e.type || 'EVEN';
+  emit(1, tag, tag === 'EVEN' || tag === 'OCCU' || tag === 'EDUC' ? (e.value || '') : (e.value || ''), out);
+  if (tag === 'EVEN' && e.label) emit(2, 'TYPE', e.label, out);
+  if (e.date) emit(2, 'DATE', e.date, out);
+  if (e.place) emit(2, 'PLAC', e.place, out);
+  if (e.note) emit(2, 'NOTE', e.note, out);
+  for (const sid of e.sources || []) out.push(`2 SOUR ${sid}`);
+  for (const c of e.tag?.children || []) if (!known.has(c.tag)) emitNode(c, 2, out);
+}
+
 /** Serialize the model back to GEDCOM 5.5.1 UTF-8. Data the model does not edit (media, burial, custom tags) is kept verbatim. */
-export function serializeGedcom(model, { source = 'rodzina-tablica' } = {}) {
+export function serializeGedcom(model, { source = 'rodzina-tablica', standardMedia = false } = {}) {
   const out = [];
   const head = (model.other || []).find((n) => n.tag === 'HEAD');
   if (head) {
@@ -139,6 +164,23 @@ export function serializeGedcom(model, { source = 'rodzina-tablica' } = {}) {
     out.push('0 HEAD', `1 SOUR ${source}`, '1 GEDC', '2 VERS 5.5.1', '2 FORM LINEAGE-LINKED', '1 CHAR UTF-8');
   }
   for (const n of (model.other || [])) if (n.tag !== 'HEAD') emitNode(n, 0, out);
+  const ext = model.ext || {};
+  for (const src of Object.values(ext.sources || {})) {
+    out.push(`0 ${src.id} SOUR`);
+    if (src.title) emit(1, 'TITL', src.title, out);
+    if (src.author) emit(1, 'AUTH', src.author, out);
+    if (src.note) emit(1, 'NOTE', src.note, out);
+    if (src.url) emit(1, 'WWW', src.url, out);
+  }
+  for (const t of standardMedia ? [] : ext.tasks || []) {
+    out.push(`0 _RT_TASK ${t.id}`);
+    emit(1, 'TEXT', t.text, out); out.push(`1 DONE ${t.done ? 'Y' : 'N'}`);
+    if (t.person) out.push(`1 INDI ${t.person}`); if (t.created) out.push(`1 DATE ${t.created}`);
+  }
+  for (const [name, c] of Object.entries(standardMedia ? {} : ext.places || {})) {
+    if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) continue;
+    out.push('0 _RT_PLACE'); emit(1, 'NAME', name, out); out.push(`1 LATI ${c.lat}`, `1 LONG ${c.lng}`);
+  }
 
   for (const p of Object.values(model.persons)) {
     const raw = p._raw;
@@ -156,13 +198,33 @@ export function serializeGedcom(model, { source = 'rodzina-tablica' } = {}) {
     for (const f of p.famc || []) out.push(`1 FAMC ${f}`);
     for (const f of p.fams || []) out.push(`1 FAMS ${f}`);
     for (const n of p.notes || []) emit(1, 'NOTE', n, out);
+    for (const sid of p.sources || []) out.push(`1 SOUR ${sid}`);
+    for (const e of p.events || []) emitExtraEvent(e, out);
+    for (const ph of p.photos || []) {
+      if (standardMedia) {
+        const ext = { 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[ph.mime] || 'jpg';
+        out.push('1 OBJE', `2 FORM ${ext}`);
+        if (ph.title) emit(2, 'TITL', ph.title, out);
+        out.push(`2 FILE photos/${ph.id}.${ext}`);
+        if (ph.primary) out.push('2 _PRIM Y');
+        continue;
+      }
+      out.push(`1 _RT_PHOTO ${ph.id}`);
+      if (ph.title) emit(2, 'TITL', ph.title, out);
+      out.push(`2 FORM ${ph.mime || 'image/jpeg'}`);
+      if (ph.w) out.push(`2 WIDTH ${ph.w}`); if (ph.h) out.push(`2 HEIGHT ${ph.h}`);
+      if (ph.primary) out.push('2 _PRIM Y');
+    }
     if (raw) {
       let seenName = false, seenBirt = false, seenDeat = false;
+      const editedTags = new Set(['SOUR', '_RT_PHOTO']);
+      const handled = new Set((p.events || []).map((e) => e.tag).filter(Boolean));
       for (const c of raw.children) {
         if (c.tag === 'NAME' && !seenName) { seenName = true; continue; }
         if (c.tag === 'BIRT' && !seenBirt) { seenBirt = true; continue; }
         if (c.tag === 'DEAT' && !seenDeat) { seenDeat = true; continue; }
-        if (['SEX', 'FAMC', 'FAMS', 'NOTE'].includes(c.tag)) continue;
+        if (['SEX', 'FAMC', 'FAMS', 'NOTE'].includes(c.tag) || editedTags.has(c.tag)) continue;
+        if (handled.has(c) || (EDIT_EVENTS.includes(c.tag) && c.tag !== 'RESI') || (c.tag === 'RESI' && !c.children.some((x) => x.tag === 'EMAIL' || x.tag === 'ADDR'))) continue; // re-emitted from p.events
         emitNode(c, 1, out);
       }
     }

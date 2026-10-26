@@ -30,6 +30,8 @@ export function mergePersons(model, keepId, dropId) {
   for (const f of ['given', 'surname', 'suffix', 'sex']) if (!K[f] && D[f]) K[f] = D[f];
   for (const ev of ['birth', 'death']) for (const f of ['date', 'place']) if (!K[ev][f] && D[ev][f]) K[ev][f] = D[ev][f];
   K.notes = [...K.notes, ...D.notes.filter((n) => !K.notes.includes(n))];
+  K.events = [...(K.events || []), ...(D.events || [])]; K.sources = [...new Set([...(K.sources || []), ...(D.sources || [])])];
+  K.photos = [...(K.photos || []), ...(D.photos || [])]; if (K.photos.length && !K.photos.some((x) => x.primary)) K.photos[0].primary = true;
   // keep dropped person's unmodelled data (media, burial...) when the keeper has none of that tag
   if (D._raw) {
     K._raw = K._raw || { level: 0, xref: K.id, tag: 'INDI', value: '', children: [] };
@@ -73,13 +75,13 @@ export function mergePersons(model, keepId, dropId) {
 
 /** Deep-ish copy where living people are anonymised: name -> "Żyjąca osoba", no dates, places, notes, media. */
 export function anonymizeLiving(model, now = new Date()) {
-  const out = { header: model.header, other: (model.other || []).filter((n) => n.tag === 'HEAD'), persons: {}, families: {} };
+  const out = { header: model.header, other: (model.other || []).filter((n) => n.tag === 'HEAD'), persons: {}, families: {}, ext: { sources: {}, tasks: [], places: {} } };
   let n = 0;
   for (const p of Object.values(model.persons)) {
     if (isLiving(p, now)) {
       n++;
-      out.persons[p.id] = { id: p.id, given: 'Żyjąca', surname: 'osoba', suffix: '', sex: p.sex, birth: { date: '', place: '' }, death: { date: '', place: '' }, famc: [...p.famc], fams: [...p.fams], notes: [] };
-    } else out.persons[p.id] = { ...p, birth: { ...p.birth }, death: { ...p.death }, famc: [...p.famc], fams: [...p.fams], notes: [...p.notes] };
+      out.persons[p.id] = { id: p.id, given: 'Żyjąca', surname: 'osoba', suffix: '', sex: p.sex, birth: { date: '', place: '' }, death: { date: '', place: '' }, famc: [...p.famc], fams: [...p.fams], notes: [], events: [], photos: [], sources: [] };
+    } else out.persons[p.id] = { ...p, birth: { ...p.birth }, death: { ...p.death }, famc: [...p.famc], fams: [...p.fams], notes: [...p.notes], events: [...(p.events || [])], photos: [...(p.photos || [])], sources: [...(p.sources || [])] };
   }
   for (const f of Object.values(model.families)) {
     const anyLiving = [f.husband, f.wife].some((id) => id && isLiving(model.persons[id], now));

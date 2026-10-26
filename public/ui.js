@@ -1,5 +1,6 @@
 // Small DOM helpers. Everything is built with createElement/textContent: stored names are never parsed as HTML.
 import { displayName, years } from './tree.js';
+import { photoUrl } from './media.js';
 
 export const $ = (id) => document.getElementById(id);
 
@@ -29,7 +30,17 @@ export function initials(p) {
   return (a + b).toUpperCase() || '?';
 }
 
-export const avatar = (p, big = false) => el('span', { class: `av ${p.sex || ''}${big ? ' lg' : ''}` }, initials(p));
+export function avatar(p, big = false) {
+  const span = el('span', { class: `av ${p.sex || ''}${big ? ' lg' : ''}` }, initials(p));
+  const ph = p.photos?.find((x) => x.primary) || p.photos?.[0];
+  if (ph) photoUrl(ph.id).then((u) => {
+    if (!u) return;
+    const img = el('img', { alt: '' });
+    img.onload = () => { span.textContent = ''; span.append(img); span.classList.add('has'); };
+    img.src = u;
+  }).catch(() => {});
+  return span;
+}
 
 /** Horizontal bars. items: [{name, n, id?}]. onclick(item) makes the label a link. */
 export function bars(items, { onclick, fmt = (n) => String(n), max } = {}) {

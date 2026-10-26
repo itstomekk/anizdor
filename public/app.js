@@ -7,9 +7,13 @@ import { computeStats, upcomingBirthdays } from './stats.js';
 import { runChecks } from './checks.js';
 import { relate } from './kin.js';
 import { $, el, avatar, bars, hist, stack, download, personLabel } from './ui.js';
+import { ensureExt } from './extras.js';
+import { eventsSection, sourcesSection, timelineTab, photosTab, viewTimeline, viewPlaces, viewSources, toolCards, buildZip } from './views_extra.js';
+import { putPhoto, readZip, allPhotoIds, deletePhoto, clearPhotos } from './media.js';
 
 const KEY = 'rodzina.ged.v1';
 let model = emptyModel();
+const adopt = (m) => { ensureExt(m); return m; };
 let version = 0;
 const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '' };
 const undoStack = [], redoStack = [];
@@ -35,17 +39,23 @@ addEventListener('beforeunload', () => saveTimer && saveNow());
 document.addEventListener('visibilitychange', () => document.hidden && saveTimer && saveNow());
 
 const snapshot = () => serializeGedcom(model);
-function restore(text) { model = text ? parseGedcom(text) : emptyModel(); version++; scheduleSave(); }
+function restore(text) { model = adopt(text ? parseGedcom(text) : emptyModel()); version++; scheduleSave(); }
 function updateUndoButtons() { $('undo').disabled = !undoStack.length; $('redo').disabled = !redoStack.length; $('export').disabled = !count(); }
 
 /** Run a change to the model: snapshot for undo, save, re-render. */
 function mutate(fn, { keepView = true } = {}) {
   undoStack.push(count() ? snapshot() : ''); if (undoStack.length > 40) undoStack.shift(); redoStack.length = 0;
-  fn(); version++; scheduleSave(); refreshBadge(); updateUndoButtons(); render();
+  fn(); ensureExt(model); version++; scheduleSave(); refreshBadge(); updateUndoButtons(); render();
 }
 function undo() { if (!undoStack.length) return; redoStack.push(count() ? snapshot() : ''); restore(undoStack.pop()); refreshBadge(); updateUndoButtons(); render(); say('Cofnięto.'); }
 function redo() { if (!redoStack.length) return; undoStack.push(count() ? snapshot() : ''); restore(redoStack.pop()); refreshBadge(); updateUndoButtons(); render(); say('Ponowiono.'); }
 
+const ctx = {
+  model: () => model, mutate: (fn) => mutate(fn), say: (t) => say(t), go: (p) => go(p), goPerson: (id, t) => goPerson(id, t), render: () => render(), ui,
+  sortedIds: () => sortedIds(),
+  exportZip: async () => { say('Przygotowuję kopię…'); const { blob, photos, missing } = await buildZip(model); download('rodzina-kopia.zip', blob, 'application/zip'); say(`Kopia ZIP gotowa: zdjęć ${photos}` + (missing ? `, brakujących plików ${missing}` : '') + '.'); },
+  cleanPhotos: async () => { const used = new Set(Object.values(model.persons).flatMap((p) => (p.photos || []).map((x) => x.id))); const ids = (await allPhotoIds()).filter((i) => !used.has(i)); for (const i of ids) await deletePhoto(i); say(`Usunięto nieużywanych zdjęć: ${ids.length}.`); },
+};
 const stats = () => (memo.v === version && memo.stats) || (memo.stats = computeStats(model), memo.issues = null, memo.v = version, memo.stats);
 const issues = () => { stats(); return memo.issues || (memo.issues = runChecks(model)); };
 function refreshBadge() { const b = $('issues'); const n = count() ? issues().filter((i) => i.sev !== 'info' && !ignored.has(issueKey(i))).length : 0; b.hidden = !n; b.textContent = n; }
@@ -61,7 +71,8 @@ function render() {
   updateUndoButtons();
   const main = $('main');
   if (!count()) { main.replaceChildren(emptyState()); return; }
-  const views = { osoby: viewPersons, tablica: viewBoard, statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools };
+  ensureExt(model);
+  const views = { osoby: viewPersons, tablica: viewBoard, 'os-czasu': (mn) => viewTimeline(mn, ctx), miejsca: (mn) => viewPlaces(mn, ctx), zrodla: (mn) => viewSources(mn, ctx), statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools };
   (views[r.view] || viewPersons)(main, r);
 }
 
@@ -76,7 +87,7 @@ function emptyState() {
 }
 async function loadDemo() {
   const t = await (await fetch('demo.ged')).text();
-  mutate(() => { model = parseGedcom(t); });
+  mutate(() => { model = adopt(parseGedcom(t)); });
   goPerson(Object.keys(model.persons)[0]);
 }
 
@@ -178,8 +189,10 @@ function personPanel(panel, id, tab) {
   const head = el('div', { class: 'ph' }, avatar(p, true), el('div', {}, el('h2', {}, displayName(p)),
     el('div', {}, lifeLine(p), el('small', {}, ` ${formatLong(p.birth.date) ? '* ' + formatLong(p.birth.date) : ''}${formatLong(p.death.date) ? '  † ' + formatLong(p.death.date) : ''}`))));
   panel.append(head);
-  panel.append(el('nav', { class: 'tabs' }, [['info', 'Osoba'], ['anc', 'Przodkowie'], ['desc', 'Potomkowie']].map(([t, n]) => el('button', { class: tab === t ? 'on' : '', onclick: () => goPerson(id, t) }, n))));
+  panel.append(el('nav', { class: 'tabs' }, [['info', 'Osoba'], ['czas', 'Oś czasu'], ['foto', `Zdjęcia${p.photos?.length ? ' (' + p.photos.length + ')' : ''}`], ['anc', 'Przodkowie'], ['desc', 'Potomkowie']].map(([t, n]) => el('button', { class: tab === t ? 'on' : '', onclick: () => goPerson(id, t) }, n))));
   if (tab === 'info') return personInfo(panel, id);
+  if (tab === 'czas') return timelineTab(panel, id, ctx);
+  if (tab === 'foto') return photosTab(panel, id, ctx);
   const gens = el('select', { onchange: (e) => { ui.gens = +e.target.value; render(); } }, [3, 5, 7, 9].map((n) => el('option', { selected: n === ui.gens }, n)));
   const canvas = el('div', { id: 'canvas', class: 'canvas' });
   const lay = tab === 'anc' ? layoutAncestors(model, id, ui.gens - 1) : layoutDescendants(model, id, ui.gens - 1);
@@ -219,6 +232,9 @@ function personInfo(panel, id) {
   const kids = childrenOf(model, id);
   panel.append(el('h3', {}, `Dzieci (${kids.length})`), el('div', { class: 'rel' }, kids.map((c) => chip(c)), !kids.length && el('span', { class: 'mut' }, 'brak')));
   panel.append(picker(id, (pid) => { const fid = sp.length ? sp[sp.length - 1].family : addSpouse(model, id, null); addChild(model, fid, pid); }, 'Dodaj dziecko'));
+
+  eventsSection(panel, id, ctx);
+  sourcesSection(panel, id, ctx);
 
   // kinship to anyone
   const out = el('div');
@@ -303,6 +319,7 @@ function viewStats(main) {
       card('Długość życia (lata)', hist(s.lifespan.hist), el('p', { class: 'mut' }, s.lifespan.n ? `Na podstawie ${s.lifespan.n} osób z pełnymi datami. Średnio ${nf(s.lifespan.avg)} lat, mediana ${nf(s.lifespan.median, 0)}. Mężczyźni ${nf(s.lifespan.avgM)}, kobiety ${nf(s.lifespan.avgF)}. ` : 'Za mało pełnych dat. ', s.lifespan.max && el('a', { onclick: () => goPerson(s.lifespan.max.id) }, `Najstarsza: ${displayName(model.persons[s.lifespan.max.id])} (${s.lifespan.max.age} lat)`))),
       card('Najczęstsze nazwiska', bars(s.topSurnames, { onclick: (i) => searchFor(i.name) })),
       card('Najczęstsze imiona', bars(s.topGiven, { onclick: (i) => searchFor(i.name) })),
+      card('Zawody (z wydarzeń)', bars(occupations(), {})),
       card('Miejsca', bars(s.topPlaces), s.topPlaces.length < 5 && el('p', { class: 'mut' }, 'Mało miejsc w danych. Uzupełnienie miejsc urodzenia da tu ciekawszy obraz.')),
       card('Liczba dzieci w rodzinie', hist(s.family.sizes), el('p', { class: 'mut' }, `Rodzin bez dzieci: ${s.family.childless}. `, s.family.largest && el('a', { onclick: () => { const f = model.families[s.family.largest]; goPerson(f.husband || f.wife); } }, `Największa: ${model.families[s.family.largest].children.length} dzieci`))),
       card('Wiek rodziców przy narodzinach dziecka (średnio, lata)', bars([{ name: `Ojcowie (${s.parentAge.nM})`, n: Math.round((s.parentAge.M || 0) * 10) / 10 }, { name: `Matki (${s.parentAge.nF})`, n: Math.round((s.parentAge.F || 0) * 10) / 10 }], { max: 50, fmt: (n) => nf(n) }), el('p', { class: 'mut' }, 'Tylko dzieci i rodzice ze znanym rokiem urodzenia.')),
@@ -311,6 +328,12 @@ function viewStats(main) {
 }
 const card = (title, ...body) => el('div', { class: 'card' }, el('h3', {}, title), ...body);
 const cardSpan = (title, ...body) => { const c = card(title, ...body); c.classList.add('span'); return c; };
+
+function occupations() {
+  const c = {};
+  for (const p of Object.values(model.persons)) for (const e of p.events || []) if (e.type === 'OCCU' && e.value && e.value !== 'Y') c[e.value] = (c[e.value] || 0) + 1;
+  return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, n]) => ({ name, n }));
+}
 
 // ---------- checks ----------
 let showIgnored = false;
@@ -366,6 +389,7 @@ function viewTools(main) {
   main.replaceChildren(el('div', { class: 'cols', style: 'margin-top:.5rem' },
     card('Kalkulator pokrewieństwa', el('p', { class: 'mut' }, 'Wybierz dwie osoby. Szukam najbliższego wspólnego przodka.'), el('div', { class: 'row' }, el('label', { class: 'mut' }, 'Osoba 1', A), el('label', { class: 'mut' }, 'Osoba 2', B)), res),
     card(`Najbliższe urodziny (60 dni)`, upcomingBox(60, false)),
+    ...toolCards(ctx, card),
     card('Eksport', el('p', { class: 'mut' }, 'Pełny plik GEDCOM zachowuje wszystko z oryginału (zdjęcia, pochówki, znaczniki programów).'),
       el('div', { class: 'row' },
         el('button', { class: 'primary', onclick: () => download('rodzina.ged', serializeGedcom(model), 'text/plain;charset=utf-8') }, 'Pobierz .ged (pełny)'),
@@ -373,20 +397,29 @@ function viewTools(main) {
         el('button', { onclick: () => download('rodzina.csv', toCsv(model), 'text/csv;charset=utf-8') }, 'Pobierz CSV (Excel)')),
       el('p', { class: 'mut' }, `Wersja bez żyjących zastąpi dane ${living} osób (żyjących lub bez dat) napisem „Żyjąca osoba” i usunie ich daty, miejsca i notatki.`)),
     card('Dane i prywatność', el('p', {}, `W tej przeglądarce: ${count()} osób. Dane nie opuszczają urządzenia. Aby mieć je na innym urządzeniu, pobierz .ged i wczytaj tam.`),
-      el('div', { class: 'row' }, el('button', { class: 'danger', onclick: () => { if (confirm('Usunąć drzewo z tej przeglądarki? Najpierw pobierz .ged. Można to cofnąć tylko do zamknięcia karty (Ctrl+Z).')) { mutate(() => { model = emptyModel(); }); go('osoby'); say('Dane usunięte z przeglądarki.'); } } }, 'Usuń dane z przeglądarki'))),
-    card('Skróty', el('ul', { class: 'plain' }, [['/', 'szukaj osoby'], ['Ctrl+Z / Ctrl+Y', 'cofnij / ponów'], ['G potem O, T, S, K, N', 'przejdź do widoku']].map(([k, t]) => el('li', {}, el('span', { class: 'kbd' }, k), el('span', { class: 'mut' }, t)))))));
+      el('div', { class: 'row' }, el('button', { class: 'danger', onclick: () => { if (confirm('Usunąć drzewo z tej przeglądarki? Najpierw pobierz .ged. Można to cofnąć tylko do zamknięcia karty (Ctrl+Z).')) { mutate(() => { model = adopt(emptyModel()); }); clearPhotos(); go('osoby'); say('Dane i zdjęcia usunięte z przeglądarki.'); } } }, 'Usuń dane z przeglądarki'))),
+    card('Skróty', el('ul', { class: 'plain' }, [['/', 'szukaj osoby'], ['Ctrl+Z / Ctrl+Y', 'cofnij / ponów'], ['G potem O, T, C, M, Z, S, K, N', 'przejdź do widoku (osoby, tablica, oś czasu, miejsca, źródła, statystyki, kontrola, narzędzia)']].map(([k, t]) => el('li', {}, el('span', { class: 'kbd' }, k), el('span', { class: 'mut' }, t)))))));
 }
 
 // ---------- io ----------
 async function importFile(f) {
   try {
-    const m = parseGedcom(decodeGedcom(new Uint8Array(await f.arrayBuffer())));
+    let photos = [];
+    let bytes = new Uint8Array(await f.arrayBuffer());
+    if (/\.zip$/i.test(f.name) || (bytes[0] === 0x50 && bytes[1] === 0x4b)) {
+      const files = await readZip(bytes);
+      const g = files.find((x) => x.name === 'rodzina.ged') || files.find((x) => /\.ged$/i.test(x.name) && !x.name.includes('dla-innych'));
+      if (!g) return say('W pliku ZIP nie ma pliku .ged.');
+      bytes = g.data; photos = files.filter((x) => /^photos\//.test(x.name));
+    }
+    const m = adopt(parseGedcom(decodeGedcom(bytes)));
     const n = Object.keys(m.persons).length;
     if (!n) return say('W pliku nie znalazłem żadnych osób.');
     if (count() && !confirm(`Zastąpić obecne dane (${count()} osób) plikiem ${f.name}? Można cofnąć (Ctrl+Z).`)) return;
     mutate(() => { model = m; });
+    for (const ph of photos) { const id = ph.name.replace(/^photos\//, '').replace(/\.[^.]+$/, ''); const ext = ph.name.split('.').pop().toLowerCase(); await putPhoto(id, new Blob([ph.data], { type: { png: 'image/png', webp: 'image/webp', gif: 'image/gif' }[ext] || 'image/jpeg' })); }
     const bad = validate(m);
-    say(`Wczytano ${f.name}: ${n} osób, ${Object.keys(m.families).length} rodzin` + (bad.length ? `, uszkodzonych powiązań: ${bad.length}` : '') + '.');
+    say(`Wczytano ${f.name}: ${n} osób, ${Object.keys(m.families).length} rodzin` + (photos.length ? `, zdjęć: ${photos.length}` : '') + (bad.length ? `, uszkodzonych powiązań: ${bad.length}` : '') + '.');
     go('osoby');
   } catch (e) { say('Błąd wczytywania: ' + e.message); }
 }
@@ -410,7 +443,7 @@ addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === '/') { e.preventDefault(); if (route().view !== 'osoby') go('osoby'); setTimeout(() => $('q')?.focus(), 0); return; }
-  if (gPending) { gPending = false; const t = { o: 'osoby', t: 'tablica', s: 'statystyki', k: 'kontrola', n: 'narzedzia' }[e.key.toLowerCase()]; if (t) go(t); return; }
+  if (gPending) { gPending = false; const t = { o: 'osoby', t: 'tablica', c: 'os-czasu', m: 'miejsca', z: 'zrodla', s: 'statystyki', k: 'kontrola', n: 'narzedzia' }[e.key.toLowerCase()]; if (t) go(t); return; }
   if (e.key.toLowerCase() === 'g') { gPending = true; setTimeout(() => { gPending = false; }, 1200); }
 });
 
@@ -418,7 +451,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 try {
   const t = localStorage.getItem(KEY);
-  if (t) { model = parseGedcom(t); if (count()) say(`Wczytano z przeglądarki: ${count()} osób.`); }
+  if (t) { model = adopt(parseGedcom(t)); if (count()) say(`Wczytano z przeglądarki: ${count()} osób.`); }
 } catch (e) { say('Nie udało się odczytać zapisanych danych: ' + e.message); }
 if (count()) refreshBadge();
 if (!location.hash && count()) location.hash = '#/osoby';
