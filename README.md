@@ -7,7 +7,11 @@ Live: https://rodzina-tablica.pages.dev/ (static; no server-side data, no login 
 
 Views
 - **Osoby**: search (diacritic-insensitive), filters, sorting; person editor (dates typed as 12.03.1950 are stored as GEDCOM), add/link parents, partners, children, delete; ancestor and descendant charts; kinship calculator.
-- **Tablica**: whole-family chart (descendants of everyone without known parents, partners shown as "⚭"), search/highlight, zoom, SVG, print/PDF.
+- **Tablica** (trzy widoki, wszystko liczone lokalnie w przeglądarce):
+  - **Galaktyka**: wybrana osoba w centrum, krewni jako gwiazdy na orbitach, pary połączone złotą linią. Zoom kółkiem, przesuwanie tła, przeciąganie pojedynczych gwiazd (tylko w widoku), najechanie podświetla krewnych, kliknięcie otwiera kartę, dwuklik ustawia osobę w centrum. Liczba kroków i kierunek (przodkowie / potomkowie) do wyboru.
+  - **Wachlarz przodków**: pierścienie pokoleń (2–9), pełne koło lub półkole, kolory wg pokolenia, płci albo kompletności danych. Brakujący rodzic to pusty, przerywany sektor, nigdy wymyślona osoba. Powtórzeni przodkowie (małżeństwa krewnych) są oznaczeni.
+  - **Drzewo klasyczne**: dotychczasowa tablica całej rodziny, wyszukiwanie, SVG, druk.
+  - Eksport SVG (bez zdjęć) i druk / PDF z każdego widoku.
 - **Statystyki**: totals, sex, living/deceased, data completeness, births/deaths/marriages by decade, lifespan, surnames, given names, places, family size, parent age, generations.
 - **Kontrola**: data checks (impossible dates, parent/child age problems, duplicates with one-click merge, unnamed people, broken links), per-issue ignore.
 - **Narzędzia**: kinship calculator, upcoming birthdays, exports: full `.ged`, `.ged` without living people (anonymised), CSV for Excel.

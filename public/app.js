@@ -10,6 +10,7 @@ import { $, el, avatar, bars, hist, stack, download, personLabel } from './ui.js
 import { ensureExt } from './extras.js';
 import { eventsSection, sourcesSection, timelineTab, photosTab, viewTimeline, viewPlaces, viewSources, toolCards, buildZip } from './views_extra.js';
 import { putPhoto, readZip, allPhotoIds, deletePhoto, clearPhotos } from './media.js';
+import { viewBoard as viewViz } from './views_viz.js';
 
 const KEY = 'rodzina.ged.v1';
 let model = emptyModel();
@@ -53,6 +54,7 @@ function redo() { if (!redoStack.length) return; undoStack.push(count() ? snapsh
 const ctx = {
   model: () => model, mutate: (fn) => mutate(fn), say: (t) => say(t), go: (p) => go(p), goPerson: (id, t) => goPerson(id, t), render: () => render(), ui,
   sortedIds: () => sortedIds(),
+  defaultFocus: () => stats().generations.deepest || Object.keys(model.persons)[0],
   exportZip: async () => { say('Przygotowuję kopię…'); const { blob, photos, missing } = await buildZip(model); download('rodzina-kopia.zip', blob, 'application/zip'); say(`Kopia ZIP gotowa: zdjęć ${photos}` + (missing ? `, brakujących plików ${missing}` : '') + '.'); },
   cleanPhotos: async () => { const used = new Set(Object.values(model.persons).flatMap((p) => (p.photos || []).map((x) => x.id))); const ids = (await allPhotoIds()).filter((i) => !used.has(i)); for (const i of ids) await deletePhoto(i); say(`Usunięto nieużywanych zdjęć: ${ids.length}.`); },
 };
@@ -72,7 +74,7 @@ function render() {
   const main = $('main');
   if (!count()) { main.replaceChildren(emptyState()); return; }
   ensureExt(model);
-  const views = { osoby: viewPersons, tablica: viewBoard, 'os-czasu': (mn) => viewTimeline(mn, ctx), miejsca: (mn) => viewPlaces(mn, ctx), zrodla: (mn) => viewSources(mn, ctx), statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools };
+  const views = { osoby: viewPersons, tablica: (mn, rt) => viewViz(mn, rt, ctx, { classic: viewClassic, download }), 'os-czasu': (mn) => viewTimeline(mn, ctx), miejsca: (mn) => viewPlaces(mn, ctx), zrodla: (mn) => viewSources(mn, ctx), statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools };
   (views[r.view] || viewPersons)(main, r);
 }
 
@@ -249,7 +251,7 @@ function personInfo(panel, id) {
 const formatDateInput = (d) => d || '';
 
 // ---------- whole family board ----------
-function viewBoard(main) {
+function viewClassic(main, head) {
   const lay = layoutForest(model);
   const mark = new Set();
   let svgNode = null, svgText = '';
@@ -286,7 +288,7 @@ function viewBoard(main) {
   };
   const fit = () => { const vb = svgNode.viewBox.baseVal; zoomTo((canvas.clientWidth - 8) / vb.width); };
   main.replaceChildren(el('div', { class: 'card', style: 'margin-top:.5rem' },
-    el('h2', {}, 'Tablica rodziny'),
+    el('h2', {}, 'Tablica rodziny'), head,
     el('p', { class: 'mut' }, `${lay.nodes.length} osób w ${lay.trees} gałęziach (potomkowie osób bez znanych rodziców; partnerzy pod ⚭; niebieski = mężczyzna, różowy = kobieta). ${lay.alone ? lay.alone + ' osób bez powiązań nie jest narysowanych.' : ''} Kliknij osobę, aby otworzyć jej kartę.`),
     el('div', { class: 'treebar' }, find, el('button', { onclick: nextMatch }, 'Następny'), info, el('button', { onclick: () => zoomTo(ui.zoom - 0.15), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => zoomTo(ui.zoom + 0.15), title: 'Powiększ' }, '+'), el('button', { onclick: () => zoomTo(1) }, '100%'), el('button', { onclick: fit }, 'Dopasuj szerokość'),
       el('button', { onclick: () => download('tablica-rodziny.svg', svgText, 'image/svg+xml') }, 'Pobierz SVG'), el('button', { onclick: () => print() }, 'Drukuj / PDF')),
