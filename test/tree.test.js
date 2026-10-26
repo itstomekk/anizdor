@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { decodeGedcom, parseGedcom, serializeGedcom, validate } from '../public/gedcom.js';
-import { emptyModel, addPerson, addSpouse, addChild, addParent, parentsOf, childrenOf, spousesOf, removePerson, layoutAncestors, layoutDescendants, layoutToSvg } from '../public/tree.js';
+import { emptyModel, addPerson, addSpouse, addChild, addParent, parentsOf, childrenOf, spousesOf, removePerson, layoutAncestors, layoutDescendants, layoutForest, layoutToSvg } from '../public/tree.js';
 
 const sample = () => parseGedcom(decodeGedcom(readFileSync(new URL('../fixtures/sample.ged', import.meta.url))));
 
@@ -86,4 +86,13 @@ test('layouts on the real private file (skipped when absent)', { skip: !(await i
     layoutToSvg(m, a); layoutToSvg(m, d);
   }
   assert.ok(max > 10);
+});
+
+test('forest: every person drawn at most once, partners of drawn people are not new roots', () => {
+  const m = parseGedcom(decodeGedcom(readFileSync(new URL('../fixtures/sample.ged', import.meta.url))));
+  const f = layoutForest(m);
+  const ids = f.nodes.map((n) => n.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(ids.sort(), ['@I1@', '@I3@']); // I2 (mother) is shown as the partner of I1
+  assert.equal(f.trees, 1);
 });

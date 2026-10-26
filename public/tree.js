@@ -152,12 +152,13 @@ export function layoutAncestors(model, rootId, maxGen = 5) {
   return { nodes, links, rows: Math.max(row, 1) };
 }
 
-/** Descendants, to the right. */
-export function layoutDescendants(model, rootId, maxGen = 6) {
+/** Descendants, to the right. `seen` (optional Set) keeps a person from being drawn twice across several trees. */
+export function layoutDescendants(model, rootId, maxGen = 6, seen = null, rowStart = 0) {
   const nodes = [], links = [];
-  let row = 0;
+  let row = rowStart;
   const walk = (pid, gen, path) => {
-    if (path.includes(pid)) return -1;
+    if (path.includes(pid) || (seen && seen.has(pid))) return -1;
+    if (seen) seen.add(pid);
     const kids = [];
     if (gen < maxGen) for (const c of childrenOf(model, pid)) { const i = walk(c, gen + 1, [...path, pid]); if (i >= 0) kids.push(i); }
     const y = kids.length ? kids.reduce((s, i) => s + nodes[i].y, 0) / kids.length : row++;
@@ -166,30 +167,61 @@ export function layoutDescendants(model, rootId, maxGen = 6) {
     return idx;
   };
   walk(rootId, 0, []);
-  return { nodes, links, rows: Math.max(row, 1) };
+  return { nodes, links, rows: Math.max(row - rowStart, 1), endRow: row };
 }
 
-/** Render a layout to an SVG string (labels escaped). */
-export function layoutToSvg(model, lay, { w = 180, h = 44, gx = 40, gy = 14, dir = 'right' } = {}) {
+/** The whole family: descendant trees of everyone without known parents, stacked top to bottom. */
+export function layoutForest(model, maxGen = 30) {
+  const seen = new Set();
+  const born = (id) => { const m = (model.persons[id].birth.date || '').match(/\d{4}/); return m ? +m[0] : 9999; };
+  const roots = Object.keys(model.persons)
+    .filter((id) => !parentsOf(model, id).family && childrenOf(model, id).length)
+    .sort((a, b) => born(a) - born(b) || a.localeCompare(b, 'pl', { numeric: true }));
+  const nodes = [], links = [];
+  let row = 0, trees = 0;
+  for (const r of roots) {
+    if (seen.has(r)) continue;
+    const trial = new Set(seen);
+    const lay = layoutDescendants(model, r, maxGen, trial, row);
+    if (lay.nodes.length === 1) continue; // partner of someone already drawn: shown as "⚭ name" on that person
+    for (const id of trial) seen.add(id);
+    const off = nodes.length;
+    for (const n of lay.nodes) nodes.push(n);
+    for (const [a, b] of lay.links) links.push([a + off, b + off]);
+    row = lay.endRow + 0.6; trees++;
+  }
+  const alone = Object.keys(model.persons).filter((id) => !seen.has(id) && !parentsOf(model, id).family && !childrenOf(model, id).length && !model.persons[id].fams.length).length;
+  return { nodes, links, rows: Math.max(row, 1), trees, alone };
+}
+
+/** Render a layout to an SVG string (labels escaped). opts.spouse adds a "⚭ partner" line; opts.mark highlights ids. */
+export function layoutToSvg(model, lay, { w = 180, gx = 40, gy = 14, spouse = false, mark = null } = {}) {
+  const h = spouse ? 58 : 44;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const maxGen = Math.max(...lay.nodes.map((n) => n.gen));
+  const maxGen = Math.max(0, ...lay.nodes.map((n) => n.gen));
   const X = (g) => 10 + g * (w + gx);
   const Y = (r) => 10 + r * (h + gy);
-  const width = X(maxGen) + w + 10, height = Y(lay.rows - 1) + h + 10;
-  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui,Arial,sans-serif">`];
-  // ancestors: parents are drawn to the right (gen grows right); descendants: also right. Same geometry.
+  const maxRow = Math.max(0, ...lay.nodes.map((n) => n.y));
+  const width = X(maxGen) + w + 10, height = Y(maxRow) + h + 10;
+  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui,Arial,sans-serif"><rect width="100%" height="100%" fill="#fff"/>`];
   for (const [a, b] of lay.links) {
     const A = lay.nodes[a], B = lay.nodes[b];
     const x1 = X(A.gen) + w, y1 = Y(A.y) + h / 2, x2 = X(B.gen), y2 = Y(B.y) + h / 2, mx = (x1 + x2) / 2;
-    parts.push(`<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#9aa" stroke-width="1.2"/>`);
+    parts.push(`<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#7b8794" stroke-width="1.3"/>`);
   }
   for (const n of lay.nodes) {
     const p = model.persons[n.id];
     const fill = p.sex === 'F' ? '#fde4ec' : p.sex === 'M' ? '#dfeafc' : '#eee';
-    const stroke = p.sex === 'F' ? '#d37a9a' : p.sex === 'M' ? '#6f95d6' : '#999';
-    parts.push(`<g data-id="${esc(n.id)}"><rect x="${X(n.gen)}" y="${Y(n.y)}" width="${w}" height="${h}" rx="6" fill="${fill}" stroke="${stroke}"/>` +
-      `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 19}" font-size="13" font-weight="600">${esc(displayName(p).slice(0, 26))}</text>` +
-      `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 35}" font-size="11" fill="#555">${esc(years(p))}</text></g>`);
+    const stroke = mark && mark.has(n.id) ? '#e08a00' : p.sex === 'F' ? '#d37a9a' : p.sex === 'M' ? '#6f95d6' : '#999';
+    const sw = mark && mark.has(n.id) ? 3 : 1;
+    let sp = '';
+    if (spouse) {
+      const names = spousesOf(model, n.id).filter((s) => s.spouse).map((s) => displayName(model.persons[s.spouse])).join(', ');
+      if (names) sp = `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 51}" font-size="11" fill="#7a4a63">⚭ ${esc(names.slice(0, 30))}</text>`;
+    }
+    parts.push(`<g data-id="${esc(n.id)}"><rect x="${X(n.gen)}" y="${Y(n.y)}" width="${w}" height="${h}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>` +
+      `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 19}" font-size="13" font-weight="600" fill="#111">${esc(displayName(p).slice(0, 26))}</text>` +
+      `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 35}" font-size="11.5" fill="#444">${esc(years(p))}</text>${sp}</g>`);
   }
   parts.push('</svg>');
   return parts.join('');

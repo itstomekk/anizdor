@@ -4,48 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#1f4e79">
 <title>Rodzina: drzewo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <h1>Rodzina</h1>
+<header class="top">
+  <a class="brand" href="#/osoby"><img src="icon.svg" alt="" width="26" height="26"><span>Rodzina</span></a>
+  <nav id="nav" aria-label="Widoki">
+    <a data-view="osoby" href="#/osoby">Osoby</a>
+    <a data-view="tablica" href="#/tablica">Tablica</a>
+    <a data-view="statystyki" href="#/statystyki">Statystyki</a>
+    <a data-view="kontrola" href="#/kontrola">Kontrola <span id="issues" class="badge" hidden></span></a>
+    <a data-view="narzedzia" href="#/narzedzia">Narzędzia</a>
+  </nav>
   <div class="actions">
-    <label class="btn">Wczytaj .ged<input id="file" type="file" accept=".ged,.gedcom,text/plain" hidden></label>
+    <button id="undo" title="Cofnij (Ctrl+Z)" disabled>↶</button>
+    <button id="redo" title="Ponów (Ctrl+Y)" disabled>↷</button>
+    <label class="btn primary">Wczytaj .ged<input id="file" type="file" accept=".ged,.gedcom,text/plain" hidden></label>
     <button id="export" disabled>Pobierz .ged</button>
-    <button id="new">+ Osoba</button>
-    <button id="wipe" class="ghost" disabled>Usuń dane z przeglądarki</button>
+    <button id="theme" title="Jasny / ciemny motyw" aria-label="Zmień motyw">◐</button>
   </div>
 </header>
-<div id="msg" role="status"></div>
-<main>
-  <aside>
-    <input id="q" type="search" placeholder="Szukaj osoby…" autocomplete="off">
-    <ul id="list"></ul>
-  </aside>
-  <section id="view">
-    <div id="empty">
-      <h2>Zacznij od pliku .ged</h2>
-      <p>Wczytaj GEDCOM z Ahnenblatt, MyHeritage, Gramps lub innego programu. Dane zostają w tej przeglądarce i nie są wysyłane na żaden serwer.</p>
-    </div>
-    <div id="person" hidden>
-      <nav class="tabs">
-        <button data-tab="info" class="on">Osoba</button>
-        <button data-tab="anc">Przodkowie</button>
-        <button data-tab="desc">Potomkowie</button>
-      </nav>
-      <div id="tab-info"></div>
-      <div id="tab-tree" hidden>
-        <div class="treebar">
-          <label>Pokolenia <select id="gens"><option>3</option><option selected>5</option><option>7</option><option>9</option></select></label>
-          <button id="svg">Pobierz SVG</button>
-          <button id="print">Drukuj / PDF</button>
-        </div>
-        <div id="canvas"></div>
-      </div>
-    </div>
-  </section>
-</main>
+<div id="msg" role="status" aria-live="polite"></div>
+<main id="main"></main>
 <script type="module" src="app.js"></script>
 </body>
 </html>
