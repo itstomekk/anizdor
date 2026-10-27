@@ -12,6 +12,7 @@ Views
   - **Wachlarz przodków**: pierścienie pokoleń (2–9), pełne koło lub półkole, kolory wg pokolenia, płci albo kompletności danych. Brakujący rodzic to pusty, przerywany sektor, nigdy wymyślona osoba. Powtórzeni przodkowie (małżeństwa krewnych) są oznaczeni.
   - **Drzewo klasyczne**: dotychczasowa tablica całej rodziny, wyszukiwanie, SVG, druk.
   - Eksport SVG (bez zdjęć) i druk / PDF z każdego widoku.
+  - Wektorowy PDF całej tablicy plus wachlarza (bez znaków wodnych): `node tools/export_layout.mjs plik.ged data/out/layout.json` i `uv run --with reportlab python tools/make_pdf.py data/out/layout.json data/out/Tablica.pdf "Tytuł"`. Wynik trafia do `data/` (poza repozytorium).
 - **Statystyki**: totals, sex, living/deceased, data completeness, births/deaths/marriages by decade, lifespan, surnames, given names, places, family size, parent age, generations.
 - **Kontrola**: data checks (impossible dates, parent/child age problems, duplicates with one-click merge, unnamed people, broken links), per-issue ignore.
 - **Narzędzia**: kinship calculator, upcoming birthdays, exports: full `.ged`, `.ged` without living people (anonymised), CSV for Excel.
