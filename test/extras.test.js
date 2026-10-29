@@ -40,7 +40,7 @@ test('life bars and history', () => {
   const bars = lifeBars(m);
   assert.equal(bars.length, 4);
   assert.ok(bars.find((b) => b.ongoing));
-  assert.deepEqual(historyBetween(1939, 1945).map((x) => x[0]), [1939, 1945]);
+  assert.deepEqual(historyBetween(1939, 1945).map((x) => x[0]), [1939, 1940, 1943, 1944, 1945]);
 });
 
 test('places: collect, rename everywhere, coordinates follow', () => {

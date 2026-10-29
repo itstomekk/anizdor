@@ -143,9 +143,18 @@ export function lifeBars(model, { surname = '' } = {}) {
 
 /** Historical context for a lifespan (short, hand-picked list of events relevant to Poland). */
 export const HISTORY = [
-  [1914, 'I wojna światowa (początek)'], [1918, 'Odzyskanie niepodległości'], [1920, 'Wojna polsko-bolszewicka'], [1929, 'Wielki Kryzys'],
-  [1939, 'II wojna światowa (początek)'], [1945, 'Koniec II wojny, nowe granice'], [1956, 'Poznański Czerwiec'], [1970, 'Grudzień 1970'], [1980, 'Powstanie Solidarności'],
-  [1981, 'Stan wojenny'], [1989, 'Okrągły Stół, wybory'], [1999, 'Polska w NATO'], [2004, 'Polska w UE'], [2020, 'Pandemia COVID-19'],
+  [1683, 'Odsiecz wiedeńska'], [1772, 'I rozbiór Polski'], [1791, 'Konstytucja 3 Maja'], [1793, 'II rozbiór Polski'], [1794, 'Insurekcja kościuszkowska'],
+  [1795, 'III rozbiór, koniec I Rzeczypospolitej'], [1807, 'Księstwo Warszawskie'], [1812, 'Wyprawa Napoleona na Moskwę'], [1815, 'Kongres wiedeński, Królestwo Polskie'],
+  [1830, 'Powstanie listopadowe'], [1831, 'Wielka Emigracja'], [1846, 'Rabacja galicyjska, powstanie krakowskie'], [1848, 'Wiosna Ludów, uwłaszczenie w Galicji'],
+  [1863, 'Powstanie styczniowe'], [1864, 'Uwłaszczenie chłopów w Królestwie Polskim'], [1867, 'Autonomia Galicji'], [1905, 'Rewolucja 1905 roku'],
+  [1914, 'I wojna światowa (początek)'], [1918, 'Odzyskanie niepodległości, powstanie wielkopolskie'], [1920, 'Wojna polsko-bolszewicka, Bitwa Warszawska'],
+  [1921, 'Konstytucja marcowa, III powstanie śląskie'], [1926, 'Przewrót majowy'], [1929, 'Wielki Kryzys'],
+  [1939, 'II wojna światowa (początek)'], [1940, 'Zbrodnia katyńska, deportacje na Sybir'], [1943, 'Powstanie w getcie warszawskim, rzeź wołyńska'],
+  [1944, 'Powstanie Warszawskie'], [1945, 'Koniec II wojny, nowe granice, przesiedlenia'], [1947, 'Akcja „Wisła”'], [1956, 'Poznański Czerwiec, Październik ’56'],
+  [1966, 'Milenium chrztu Polski'], [1968, 'Marzec 1968'], [1970, 'Grudzień 1970'], [1976, 'Czerwiec 1976 (Radom, Ursus)'], [1978, 'Karol Wojtyła papieżem'],
+  [1980, 'Powstanie Solidarności'], [1981, 'Stan wojenny'], [1989, 'Okrągły Stół, wybory'], [1990, 'Lech Wałęsa prezydentem'], [1997, 'Powódź tysiąclecia, nowa konstytucja'],
+  [1999, 'Polska w NATO'], [2004, 'Polska w UE'], [2005, 'Śmierć Jana Pawła II'], [2010, 'Katastrofa smoleńska'], [2020, 'Pandemia COVID-19'],
+  [2022, 'Wojna w Ukrainie, uchodźcy w Polsce'],
 ];
 export const historyBetween = (from, to) => HISTORY.filter(([y]) => y >= from && y <= to);
 

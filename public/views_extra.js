@@ -114,10 +114,20 @@ export function viewTimeline(main, ctx) {
       const bs = lifeBars(m, { surname: st.surname }).filter((b) => (from == null || b.to >= from) && (to == null || b.from <= to));
       if (!bs.length) return body.append(el('p', { class: 'mut' }, 'Brak osób z datami w tym zakresie.'));
       const lo = Math.floor(Math.min(...bs.map((b) => b.from)) / 10) * 10, hi = Math.ceil(Math.max(...bs.map((b) => b.to)) / 10) * 10;
-      const W = 1100, left = 230, rowH = 20, top = 52, X = (y) => left + ((y - lo) / (hi - lo || 1)) * (W - left - 20), H = top + bs.length * rowH + 20;
+      const W = 1100, left = 230, rowH = 20, top = st.hist ? 80 : 52, X = (y) => left + ((y - lo) / (hi - lo || 1)) * (W - left - 20), H = top + bs.length * rowH + 20;
       const s = svg('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'lives', role: 'img' });
       for (let y = lo; y <= hi; y += 10) { s.append(svg('line', { x1: X(y), x2: X(y), y1: top - 6, y2: H - 14, class: 'grid' })); if ((y - lo) % 20 === 0) s.append(svg('text', { x: X(y), y: 14, 'text-anchor': 'middle', class: 'ax' }, String(y))); }
-      if (st.hist) for (const [y, t] of HISTORY.filter(([y]) => y >= lo && y <= hi)) { s.append(svg('line', { x1: X(y), x2: X(y), y1: top - 6, y2: H - 14, class: 'hl' })); const idx = HISTORY.findIndex((h) => h[0] === y) + 1; const c = svg('circle', { cx: X(y), cy: 36, r: 8, class: 'hc' }); c.append(svg('title', {}, `${y}: ${t}`)); s.append(c, svg('text', { x: X(y), y: 40, 'text-anchor': 'middle', class: 'hn' }, String(idx))); }
+      if (st.hist) {
+        const lanes = [-1e9, -1e9, -1e9];
+        HISTORY.forEach(([y, t], i) => {
+          if (y < lo || y > hi) return;
+          const x = X(y); let k = lanes.findIndex((lx) => x - lx >= 19); if (k < 0) k = lanes.indexOf(Math.min(...lanes)); lanes[k] = x;
+          const cy = 30 + k * 18;
+          s.append(svg('line', { x1: x, x2: x, y1: cy + 8, y2: H - 14, class: 'hl' }));
+          const c = svg('circle', { cx: x, cy, r: 8, class: 'hc' }); c.append(svg('title', {}, `${y}: ${t}`));
+          s.append(c, svg('text', { x, y: cy + 4, 'text-anchor': 'middle', class: 'hn' }, String(i + 1)));
+        });
+      }
       bs.forEach((b, i) => {
         const p = m.persons[b.id], y = top + i * rowH;
         const g = svg('g', { 'data-id': b.id, class: `lifebar ${p.sex || ''}` });
