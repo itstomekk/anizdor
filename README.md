@@ -1,70 +1,92 @@
-# ANIZDOR 🏡
+<div align="center">
 
-ANIZDOR to RODZINA czytana od tyłu. (Formerly `rodzina-tablica`.)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="public/logo-dark.png">
+  <img src="public/logo.png" alt="ANIZDOR" width="320">
+</picture>
 
-Private family-tree app. Browser-based, runs on Cloudflare (Pages now; Workers + D1 + Access later).
+### Free, open-source family tree editor that runs in your browser
 
-## Status
-Live: https://anizdor.pages.dev/ (end-to-end encrypted cloud vault, family password). The old URL https://rodzina-tablica.pages.dev/ redirects here.
+No account. No install. No ads. Your family stays yours.
 
-Views
-- **Osoby**: search (diacritic-insensitive), filters, sorting; person editor (dates typed as 12.03.1950 are stored as GEDCOM), add/link parents, partners, children, delete; ancestor and descendant charts; kinship calculator.
-- **Tablica** (trzy widoki, wszystko liczone lokalnie w przeglądarce):
-  - **Galaktyka**: wybrana osoba w centrum, krewni jako gwiazdy na orbitach, pary połączone złotą linią. Zoom kółkiem, przesuwanie tła, przeciąganie pojedynczych gwiazd (tylko w widoku), najechanie podświetla krewnych, kliknięcie otwiera kartę, dwuklik ustawia osobę w centrum. Liczba kroków i kierunek (przodkowie / potomkowie) do wyboru.
-  - **Wachlarz przodków**: pierścienie pokoleń (2–9), pełne koło lub półkole, kolory wg pokolenia, płci albo kompletności danych. Brakujący rodzic to pusty, przerywany sektor, nigdy wymyślona osoba. Powtórzeni przodkowie (małżeństwa krewnych) są oznaczeni.
-  - **Drzewo klasyczne**: dotychczasowa tablica całej rodziny, wyszukiwanie, SVG, druk.
-  - Eksport SVG (bez zdjęć) i druk / PDF z każdego widoku.
-  - Wektorowy PDF całej tablicy plus wachlarza (bez znaków wodnych): `node tools/export_layout.mjs plik.ged data/out/layout.json` i `uv run --with reportlab python tools/make_pdf.py data/out/layout.json data/out/Tablica.pdf "Tytuł"`. Wynik trafia do `data/` (poza repozytorium).
-- **Statystyki**: totals, sex, living/deceased, data completeness, births/deaths/marriages by decade, lifespan, surnames, given names, places, family size, parent age, generations.
-- **Kontrola**: data checks (impossible dates, parent/child age problems, duplicates with one-click merge, unnamed people, broken links), per-issue ignore.
-- **Narzędzia**: kinship calculator, upcoming birthdays, exports: full `.ged`, `.ged` without living people (anonymised), CSV for Excel.
+**[🌳 Open the app](https://anizdor.pages.dev/)** · [📂 GEDCOM](#-gedcom-compatibility) · [🔒 Privacy](#-privacy) · [🛠️ Development](DEVELOPMENT.md) · [📜 License](LICENSE)
 
-- **Oś czasu**: whole-family timeline (births, deaths, marriages, custom events) with a historical background (PL/world), and a life-lines chart (bars birth to death, filter by years and surname).
-- **Zdjęcia** (per person tab): photos stored in the browser (IndexedDB), downscaled to 1600 px, primary photo used as avatar. Backup as `.zip` (GEDCOM + photos); the ZIP also contains a standards-only GEDCOM for Ahnenblatt/MyHeritage.
-- **Miejsca**: place list with rename-everywhere, optional coordinates, schematic map. **Źródła**: sources and research tasks. Person events (occupation, residence, baptism, burial, ...) edited on the person card. Printable reports (index, family sheet), find and replace with preview.
+<br>
 
-Other: undo/redo (Ctrl+Z / Ctrl+Y), dark mode, keyboard shortcuts (`/`, `g o|t|s|k|n`), offline/installable (service worker + manifest), strict CSP.
+<a href="https://anizdor.pages.dev/"><img src=".github/readme/galaxy.png" alt="ANIZDOR galaxy view: one person in the middle, relatives around them as stars" width="860"></a>
 
-GEDCOM: import UTF-8/UTF-16/ANSI (Windows-1250/1252), export 5.5.1 UTF-8, lossless for data the editor does not touch (media, burial, custom tags, extra names).
+<sub>Screenshots use a made-up demo family. The app interface is in Polish.</sub>
 
-Data lives in the browser (localStorage + IndexedDB). With **Chmura** on, one shared copy also lives in Cloudflare D1, end-to-end encrypted.
+</div>
 
-## Cloud (Chmura, encrypted)
-One family vault: the tree and all photos, shared by everyone who knows the family password.
-- Opening the app on a remembered device loads the latest tree by itself. A new device asks for the password once.
-- Edits upload about 3 s later; other devices check every 2 min and when the tab comes back into view.
-- If two devices edit at once, the second one gets a choice: take the cloud version or keep its own (Ctrl+Z undoes either).
-- The cloud keeps up to 30 older tree versions (at most one per 30 min): *Narzędzia → Chmura → Wcześniejsze wersje*.
-- Crypto: PBKDF2-SHA256 (600k) turns the password into an AES-GCM key plus a separate auth secret. The server stores only SHA-256(auth secret) and ciphertext. Without the password the data cannot be read, and the password cannot be recovered.
-- First setup needs the one-time `SETUP_CODE` (a Pages secret); after setup, `/api/vault/init` refuses further calls.
+## 👋 What is this?
 
-API (`functions/api/[[path]].js`, D1 binding `DB`, auth header `x-vault-auth`):
+ANIZDOR is a family tree editor for people who want to keep their genealogy **on their own device**. Open the page, load a GEDCOM file (the standard file format of genealogy programs), and start exploring or editing. Everything happens in your browser.
 
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/api/vault` | public: initialized?, salt, iterations |
-| POST | `/api/vault/init` | one time, needs `SETUP_CODE` |
-| GET | `/api/items` | list: tree, photos, older tree versions |
-| GET/PUT | `/api/items/tree` | PUT needs `x-base-rev`; 409 on conflict |
-| GET | `/api/items/tree_h<rev>` | older version (read-only) |
-| GET/PUT/DELETE | `/api/items/photo_<id>` | encrypted photo |
+The name is **RODZINA** (Polish for "family") read backwards. The app interface is in **Polish** for now; translations are welcome (see [How to help](#-how-to-help)).
 
-## Develop
-    npm test          # node:test, no dependencies (cloud API tested on node:sqlite as a D1 stand-in)
-    npm run dev       # wrangler pages dev public (needs network on first run)
+## ✨ What you can do
 
-🚀 **Deploy is automatic.** Every push to `main` runs the tests and publishes to Cloudflare Pages via GitHub Actions (`.github/workflows/deploy.yml`, secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`). Watch runs at https://github.com/itstomekk/anizdor/actions. Manual fallback: `npx wrangler pages deploy public --project-name anizdor --branch main`.
+- 👤 **Edit people**: names, dates (type `12.03.1950` and it just works), places, events, notes, parents, partners, children. Undo and redo with Ctrl+Z / Ctrl+Y.
+- 🌳 **See the tree your way**: the classic family board, a **vertical tree laid out on a birth-year axis**, a **galaxy** with one person in the centre and relatives around them, and an **ancestor fan** with up to 9 generations.
+- 🖱️ **Click anyone in the tree** for a quick popup with the essentials, no need to leave the chart.
+- ⏳ **Life lines and timeline**: bars from birth to death show **who lived at the same time**, with Polish and world history in the background.
+- 📊 **Statistics**: surnames, given names, lifespans, births and deaths by decade, family size, generations, and more.
+- 🩺 **Data checks with auto-repair**: impossible dates, parents younger than their children, duplicates (merge in one click), broken links. Safe problems can be fixed automatically.
+- 📍 **Places and sources**: rename a place everywhere at once, add coordinates, keep sources and research tasks.
+- 🖼️ **Photos**: stored in your browser, shrunk to a sensible size, with a primary photo as the avatar.
+- 💾 **Backup**: one ZIP with your GEDCOM and all photos.
+- 🖨️ **Export to PNG, PDF or SVG**: arrange the people the way you want them **by dragging, before you save**.
 
-Local cloud: put `SETUP_CODE=...` in `.dev.vars` (gitignored), then `npx wrangler@4 pages dev public --persist-to <scratch dir>`.
+<table>
+  <tr>
+    <td width="50%"><img src=".github/readme/persons.png" alt="People list with a person card open"><br><sub><b>People</b>: search, filters, and a full person card</sub></td>
+    <td width="50%"><img src=".github/readme/ancestor-fan.png" alt="Ancestor fan chart with five generations"><br><sub><b>Ancestor fan</b>: gaps show as dashed, never as invented people</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/readme/life-lines.png" alt="Life lines chart with bars from birth to death"><br><sub><b>Life lines</b>: see who overlapped in time</sub></td>
+    <td width="50%"><img src=".github/readme/statistics.png" alt="Statistics page with charts"><br><sub><b>Statistics</b>: your family in numbers</sub></td>
+  </tr>
+</table>
 
-## Privacy
-No real family data in this repo (`.gitignore` blocks `*.ged`, `*.ahn`, JSON dumps). Cloud data is encrypted in the browser before upload. Cloudflare Access is not enabled on the account, so the password is the only gate.
+## 🔒 Privacy
 
-## Roadmap
-1. GEDCOM import/export (done)
-2. Person editor, ancestor/descendant charts, SVG/print (done)
-3. Statistics, data checks, merge, anonymised export, whole-family chart (done)
-4. Cloudflare Access login + D1 storage (needs Access enabled on the account)
-5. Timeline, photos, places, sources, tasks, events, ZIP backup (done)
-6. Encrypted cloud vault: tree + photos in D1, auto sync, conflicts, version history (done)
-7. Next: change family password (re-encrypt), map tiles for places, relationship-based reports
+- **Your data stays in your browser** (local storage and IndexedDB). The app loads no third-party scripts and nothing leaves your device unless you turn the cloud on.
+- **Optional family cloud**, end-to-end encrypted. Relatives who know the family password share one tree and its photos on Cloudflare. Your password becomes a key with **PBKDF2 (600,000 rounds)** and the data is sealed with **AES-GCM** in your browser before upload. The server only ever sees ciphertext, so nobody else can read your tree, and a forgotten password cannot be recovered.
+- Want to share a tree without living relatives in it? There is an **anonymised export** that leaves living people out.
+
+## 📂 GEDCOM compatibility
+
+GEDCOM is the common language of genealogy software, so you can move in and out freely.
+
+- **Import**: UTF-8, UTF-16, and legacy ANSI files (Windows-1250 and 1252, so Polish letters survive).
+- **Export**: GEDCOM 5.5.1, UTF-8. Data the editor does not touch (media, burial, custom tags, extra names) comes back **unchanged**.
+- Works with files from programs such as **Ahnenblatt** and **MyHeritage**. The ZIP backup also carries a standards-only GEDCOM for them.
+- Other exports: CSV for Excel.
+
+## 📱 Works offline, looks good in the dark
+
+ANIZDOR is an installable **PWA**: add it to your phone or desktop and it keeps working without internet. There is a **dark mode** for late-night research, and keyboard shortcuts (press `/` to search) for the impatient.
+
+## 🚀 Run your own copy
+
+It is a plain static site plus one small Cloudflare function, so your own copy is cheap and quick:
+
+1. **Fork** this repository.
+2. Connect the fork to **Cloudflare Pages** (output folder `public`, no build command) or use the included GitHub Actions workflow.
+3. Optional: add a D1 database if you want the encrypted family cloud.
+
+Step-by-step details, the cloud API, tests, and tooling are in **[DEVELOPMENT.md](DEVELOPMENT.md)**.
+
+## 🤝 How to help
+
+ANIZDOR gets better when real family trees run into it. You can:
+
+- 🐛 **Report a bug** or 💡 **suggest an idea** in [GitHub Issues](https://github.com/itstomekk/anizdor/issues).
+- 🌍 **Help translate** the interface. It is Polish only today, and every language opens the app to more families.
+- 🧪 **Test with your own GEDCOM files** from other programs and tell us what breaks.
+- ⚠️ **Never post real family data in issues.** Names, dates, and photos of living people are private. Trim or invent a small example that shows the problem.
+
+## 📜 License
+
+[MIT](LICENSE) © 2026 Tomek Kołodziejczuk. Free to use, copy, change, and share.
