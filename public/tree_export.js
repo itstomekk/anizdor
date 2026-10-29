@@ -71,13 +71,13 @@ const toBlob = (c, type, q) => new Promise((r) => c.toBlob(r, type, q));
 
 /**
  * Open the export editor as a full-screen overlay.
- * opts: { model, lay, vertical, timeAxis, lifetime, isDead, title, download(name, data, type), say(msg) }
+ * opts: { model, lay, vertical, timeAxis, lifetime, isDead, start (offsets dragged in the tree, used when nothing is saved here yet), title, download(name, data, type), say(msg) }
  */
-export function openTreeExport({ model, lay, vertical, timeAxis, lifetime = false, isDead = null, title = '', download, say = () => {} }) {
+export function openTreeExport({ model, lay, vertical, timeAxis, lifetime = false, isDead = null, start = null, title = '', download, say = () => {} }) {
   // v2: vertical trees are packed sideways now, older hand offsets would land in the wrong place
-  const key = `anizdor.exportOffsets.${vertical ? (timeAxis ? (lifetime ? 'l2' : 't2') : 'v2') : 'h'}`;
+  const key = `anizdor.exportOffsets.${vertical ? (timeAxis ? (lifetime ? 'l3' : 't3') : 'v2') : 'h'}`;
   let offsets = {};
-  try { offsets = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch {}
+  try { offsets = JSON.parse(localStorage.getItem(key) || 'null') || structuredClone(start || {}); } catch {}
   const known = new Set(lay.nodes.map((n) => n.id));
   for (const id of Object.keys(offsets)) if (!known.has(id)) delete offsets[id];
   const st = { title, withKids: true, paper: 'a3', scale: 2 };

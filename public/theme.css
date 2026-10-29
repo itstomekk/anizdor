@@ -227,6 +227,9 @@ h2 { font-size: 1.5rem; }
 .pp-ev, .pp-row { margin: .12rem 0; } .pp-rel { cursor: pointer; font-weight: 600; }
 .pp-btns { display: flex; gap: .35rem; margin-top: .5rem; flex-wrap: wrap; }
 .pp-btns button { padding: .25rem .7rem; min-height: 30px; }
+.pp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem .45rem; }
+.pp-f { display: flex; flex-direction: column; gap: .1rem; font-size: .78rem; min-width: 0; }
+.pp-f input, .pp-f select { width: 100%; min-width: 0; padding: .25rem .4rem; font-size: .88rem; }
 #canvas g[data-id] { cursor: pointer; }
 
 /* Export editor overlay */
@@ -258,3 +261,13 @@ body.xp-open { overflow: hidden; }
 .linesview .lives .curlab { fill: var(--tx); font-size: 11px; font-weight: 600; pointer-events: none; paint-order: stroke; stroke: var(--card); stroke-width: 3px; }
 .linesview { max-height: none; overflow-x: auto; }
 @media (max-width: 860px) { .pp-x { min-width: 40px; min-height: 40px; font-size: 1.05rem; } .pp-btns button { min-height: 38px; } }
+
+/* fill in the gaps form */
+.miss-kinds { gap: .3rem .9rem; margin: .4rem 0 .6rem; }
+.miss-row { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: .4rem .8rem; align-items: center; padding: .55rem 0; border-top: 1px solid var(--bd); }
+.miss-who a { font-weight: 600; cursor: pointer; } .miss-who .mut { font-size: .82rem; }
+.miss-q { display: flex; flex-direction: column; gap: .2rem; font-size: .88rem; } .miss-q input, .miss-q select { width: 100%; }
+@media (max-width: 860px) { .miss-row { grid-template-columns: 1fr; } }
+/* elastic drag in the tree */
+#canvas svg g[data-id] { cursor: pointer; } @media (pointer: fine) { #canvas svg[data-mode="t"] g[data-id], #canvas svg[data-mode="v"] g[data-id] { cursor: grab; } }
+#canvas svg.dragging, #canvas svg.dragging g[data-id] { cursor: grabbing; user-select: none; }

@@ -14,15 +14,17 @@ import { viewBoard as viewViz } from './views_viz.js';
 import { createCloud } from './cloud.js';
 import { openTreeExport } from './tree_export.js';
 import { showPersonPop, closePersonPop } from './person_pop.js';
+import { attachSprings } from './tree_springs.js';
+import { viewMissing } from './missing.js';
 import { viewLifelines } from './lifelines.js';
 
 const KEY = 'rodzina.ged.v1';
 let model = emptyModel();
 const adopt = (m) => { ensureExt(m); return m; };
 let version = 0;
-const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '', vertical: true, timeAxis: true, lifetime: false };
+const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '', vertical: true, timeAxis: true, treeScroll: null };
 // default: vertical tree, oldest on top, placed on a birth-year axis
-try { ui.vertical = localStorage.getItem('anizdor.treeDir') !== 'h'; ui.timeAxis = localStorage.getItem('anizdor.treeTime') !== '0'; ui.lifetime = localStorage.getItem('anizdor.treeLife') === '1'; } catch {}
+try { ui.vertical = localStorage.getItem('anizdor.treeDir') !== 'h'; ui.timeAxis = localStorage.getItem('anizdor.treeTime') !== '0'; } catch {}
 const undoStack = [], redoStack = [];
 const memo = { v: -1, stats: null, issues: null };
 let ignored = new Set();
@@ -90,14 +92,14 @@ const goPerson = (id, tab = 'info') => go(`osoby/${strip(id)}/${tab}`);
 
 function render() {
   const r = route();
-  const TOOL_TABS = [['narzedzia', 'Narzędzia'], ['zrodla', 'Źródła'], ['kontrola', 'Kontrola']];
+  const TOOL_TABS = [['narzedzia', 'Narzędzia'], ['uzupelnij', 'Uzupełnij braki'], ['zrodla', 'Źródła'], ['kontrola', 'Kontrola']];
   const navView = TOOL_TABS.some(([v]) => v === r.view) ? 'narzedzia' : r.view;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.view === navView));
   updateUndoButtons();
   const main = $('main');
   if (!count()) { main.replaceChildren(emptyState()); return; }
   ensureExt(model);
-  const views = { osoby: viewPersons, tablica: (mn, rt) => viewViz(mn, rt, ctx, { classic: viewClassic, lines: viewLifelines, download }), 'os-czasu': (mn) => viewTimeline(mn, ctx), miejsca: (mn) => viewPlaces(mn, ctx), zrodla: (mn) => viewSources(mn, ctx), statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools };
+  const views = { osoby: viewPersons, tablica: (mn, rt) => viewViz(mn, rt, ctx, { classic: viewClassic, lines: viewLifelines, download }), 'os-czasu': (mn) => viewTimeline(mn, ctx), miejsca: (mn) => viewPlaces(mn, ctx), zrodla: (mn) => viewSources(mn, ctx), statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools, uzupelnij: (mn) => viewMissing(mn, ctx) };
   if (navView === 'narzedzia') {
     const n = issues().filter((i) => i.sev !== 'info' && !ignored.has(issueKey(i))).length;
     const inner = el('div');
@@ -301,11 +303,22 @@ function viewClassic(main, head) {
     if (g) g.setAttribute('transform', `translate(${canvas.scrollLeft / ui.zoom} 0)`);
   };
   canvas.addEventListener('scroll', pinYears, { passive: true });
+  // hand-dragged positions (elastic drag), one set per layout mode, kept in this browser
+  const offKey = `anizdor.treeOffsets.${ui.timeAxis ? 't' : 'v'}`;
+  let offsets = {};
+  try { offsets = JSON.parse(localStorage.getItem(offKey) || '{}') || {}; } catch {}
+  const saveOffsets = () => { try { if (Object.keys(offsets).length) localStorage.setItem(offKey, JSON.stringify(offsets)); else localStorage.removeItem(offKey); } catch {} resetBtn.hidden = !Object.keys(offsets).length; };
   const draw = () => {
-    svgText = layoutToSvg(model, lay, { spouse: true, mark, vertical: ui.vertical, timeAxis: ui.timeAxis, lifetime: ui.lifetime, isDead: isDeceased });
-    svgNode = mountSvg(canvas, svgText, (gid, g) => showPersonPop(ctx, gid, g.querySelector('rect') || g, { onRelative: popAt }));
+    svgText = layoutToSvg(model, lay, { spouse: true, mark, vertical: ui.vertical, timeAxis: ui.timeAxis, lifetime: ui.timeAxis, isDead: isDeceased, offsets: ui.vertical ? offsets : null });
+    svgNode = mountSvg(canvas, svgText, (gid, g) => showPersonPop(ctx, gid, g.querySelector('rect') || g, popOpts));
+    if (ui.vertical) attachSprings(svgNode, { onDragStart: closePersonPop, onCommit: (moves) => {
+      for (const [id, dx] of Object.entries(moves)) { const o = offsets[id] || { dx: 0, dy: 0 }; o.dx = Math.round((o.dx + dx) * 10) / 10; if (Math.abs(o.dx) < 0.5) delete offsets[id]; else offsets[id] = o; }
+      saveOffsets();
+    } });
     zoomTo(ui.zoom);
   };
+  const resetBtn = el('button', { title: 'Zapomnij ręczne przesunięcia i ułóż drzewo automatycznie', hidden: !Object.keys(offsets).length, onclick: () => { offsets = {}; saveOffsets(); const l = canvas.scrollLeft, t = canvas.scrollTop; draw(); canvas.scrollLeft = l; canvas.scrollTop = t; } }, '↺ Ułóż');
+  canvas.addEventListener('scroll', () => { ui.treeScroll = { l: canvas.scrollLeft, t: canvas.scrollTop, k: offKey + ui.vertical }; }, { passive: true });
   // start at the oldest person (earliest known birth year): horizontally centred, near the top
   function centerOldest() {
     let best = null, by = Infinity;
@@ -336,23 +349,30 @@ function viewClassic(main, head) {
   };
   const fit = () => { const vb = svgNode.viewBox.baseVal; zoomTo((canvas.clientWidth - 8) / vb.width); };
   // relative clicked in the popover: jump to that person in the tree and show their popover there
-  function popAt(pid) {
+  function popAt(pid, scroll = true) {
     const g = canvas.querySelector(`g[data-id="${CSS.escape(pid)}"]`);
-    if (!g) return showPersonPop(ctx, pid, null, { onRelative: popAt });
-    g.scrollIntoView({ block: 'center', inline: 'center' });
-    showPersonPop(ctx, pid, g.querySelector('rect') || g, { onRelative: popAt });
+    if (!g) return showPersonPop(ctx, pid, null, popOpts);
+    if (scroll) g.scrollIntoView({ block: 'center', inline: 'center' });
+    showPersonPop(ctx, pid, g.querySelector('rect') || g, popOpts);
   }
+  // after a quick edit the whole view re-renders: show the popover again on the new tree, without jumping
+  const popOpts = { onRelative: popAt, reopen: (pid) => document.querySelector('#canvas') && requestAnimationFrame(() => { const c = document.querySelector('#canvas'); const g = c.querySelector(`g[data-id="${CSS.escape(pid)}"]`); if (g) showPersonPop(ctx, pid, g.querySelector('rect') || g, popOpts); }) };
   main.replaceChildren(el('div', { class: 'card', style: 'margin-top:.3rem' },
     head,
     el('p', { class: 'mut treeinfo', title: 'Gałęzie to potomkowie osób bez znanych rodziców.' }, `${lay.nodes.length} osób · gałęzie: ${lay.trees} · ⚭ partner${lay.alone ? ` · ${lay.alone} bez powiązań (nienarysowani)` : ''} ${ui.vertical && ui.timeAxis ? ' · przerywana ramka = rok urodzenia szacowany' : ''} · kliknij osobę, aby zobaczyć szczegóły`),
     el('div', { class: 'treebar' }, find, el('button', { onclick: nextMatch }, 'Następny'), info, el('button', { onclick: () => zoomTo(ui.zoom - 0.15), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => zoomTo(ui.zoom + 0.15), title: 'Powiększ' }, '+'), el('button', { onclick: fit, title: 'Dopasuj do szerokości ekranu' }, 'Dopasuj'),
       el('button', { class: 'dir', title: 'Obróć układ drzewa', 'aria-pressed': String(ui.vertical), onclick: () => { ui.vertical = !ui.vertical; try { localStorage.setItem('anizdor.treeDir', ui.vertical ? 'v' : 'h'); } catch {} closePersonPop(); viewClassic(main, head); } }, ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'),
-      ui.vertical ? el('label', { class: 'inl', title: 'Każda osoba na wysokości swojego roku urodzenia' }, el('input', { type: 'checkbox', checked: ui.timeAxis, onchange: (e) => { ui.timeAxis = e.target.checked; try { localStorage.setItem('anizdor.treeTime', ui.timeAxis ? '1' : '0'); } catch {} closePersonPop(); viewClassic(main, head); } }), 'oś lat') : null,
-      ui.vertical && ui.timeAxis ? el('label', { class: 'inl', title: 'Ramka osoby ciągnie się od roku urodzenia do roku śmierci: jej wysokość to długość życia' }, el('input', { type: 'checkbox', checked: ui.lifetime, onchange: (e) => { ui.lifetime = e.target.checked; try { localStorage.setItem('anizdor.treeLife', ui.lifetime ? '1' : '0'); } catch {} closePersonPop(); draw(); centerOldest(); } }), 'długość życia') : null,
-      el('button', { class: 'primary', title: 'Zapisz jako PNG, PDF lub SVG albo wydrukuj. Przed zapisem możesz poprzesuwać osoby.', onclick: () => { closePersonPop(); openTreeExport({ model, lay, vertical: ui.vertical, timeAxis: ui.timeAxis, lifetime: ui.lifetime, isDead: isDeceased, download, say }); } }, 'Eksport…')),
+      ui.vertical ? el('label', { class: 'inl', title: 'Każda osoba na wysokości swojego roku urodzenia; ramka ciągnie się do roku śmierci (u żyjących do dziś), więc jej wysokość to długość życia' }, el('input', { type: 'checkbox', checked: ui.timeAxis, onchange: (e) => { ui.timeAxis = e.target.checked; try { localStorage.setItem('anizdor.treeTime', ui.timeAxis ? '1' : '0'); } catch {} closePersonPop(); viewClassic(main, head); } }), 'oś lat') : null,
+      ui.vertical ? resetBtn : null,
+      el('button', { class: 'primary', title: 'Zapisz jako PNG, PDF lub SVG albo wydrukuj. Przed zapisem możesz poprzesuwać osoby.', onclick: () => { closePersonPop(); openTreeExport({ model, lay, vertical: ui.vertical, timeAxis: ui.timeAxis, lifetime: ui.timeAxis, isDead: isDeceased, start: ui.vertical ? offsets : null, download, say }); } }, 'Eksport…')),
     canvas));
   draw();
-  if (ui.find) find.dispatchEvent(new Event('input')); else requestAnimationFrame(centerOldest);
+  if (ui.find) find.dispatchEvent(new Event('input'));
+  else requestAnimationFrame(() => {
+    // coming back (e.g. after an edit): keep the place; first visit: start at the oldest person
+    const s = ui.treeScroll;
+    if (s && s.k === offKey + ui.vertical) { canvas.scrollLeft = s.l; canvas.scrollTop = s.t; } else centerOldest();
+  });
 }
 
 // ---------- statistics ----------
@@ -534,7 +554,7 @@ async function importFile(f) {
     for (const ph of photos) { const id = ph.name.replace(/^photos\//, '').replace(/\.[^.]+$/, ''); const ext = ph.name.split('.').pop().toLowerCase(); await putPhoto(id, new Blob([ph.data], { type: { png: 'image/png', webp: 'image/webp', gif: 'image/gif' }[ext] || 'image/jpeg' })); }
     const bad = validate(m);
     say(`Wczytano ${f.name}: ${n} osób, ${Object.keys(m.families).length} rodzin` + (photos.length ? `, zdjęć: ${photos.length}` : '') + (bad.length ? `, uszkodzonych powiązań: ${bad.length}` : '') + '.');
-    go('tablica');
+    ui.treeScroll = null; go('tablica');
   } catch (e) { say('Błąd wczytywania: ' + e.message); }
 }
 

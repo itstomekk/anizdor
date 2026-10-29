@@ -271,14 +271,35 @@ export function endYear(p, born, dead = !!(p?.death?.date || p?.death?.place), n
 }
 
 /**
+ * Connector from parent box A to child box B ({x, y} top-left corners). Ha = parent box height.
+ * Shared by the SVG builder and the drag code, which redraws connectors while boxes move.
+ */
+export function linkPath(A, B, Ha, { w = 150, h = 46, vertical = false, time = false } = {}) {
+  if (vertical && B.y < A.y + Ha + 8 && (B.x >= A.x + w || B.x + w <= A.x)) {
+    // child born while the parent's bar is still running: leave the bar from its side at the child's birth year
+    const right = B.x >= A.x + w, x1 = right ? A.x + w : A.x, x2 = B.x + w / 2;
+    const yb = Math.max(A.y + 10, Math.min(B.y - 8, A.y + Ha - 4));
+    return `M${x1} ${yb} H${x2} V${B.y}`;
+  }
+  if (vertical) {
+    const x1 = A.x + w / 2, y1 = A.y + Ha, x2 = B.x + w / 2, y2 = B.y;
+    const my = time ? Math.min(y1 + 12, y2 - 4) : (y1 + y2) / 2;
+    return `M${x1} ${y1} V${my} H${x2} V${y2}`;
+  }
+  const x1 = A.x + w, y1 = A.y + h / 2, x2 = B.x, y2 = B.y + h / 2, mx = (x1 + x2) / 2;
+  return `M${x1} ${y1} H${mx} V${y2} H${x2}`;
+}
+
+/**
  * Render a layout to an SVG string (labels escaped).
  * opts.spouse adds a "⚭ partner" line; opts.mark highlights ids; opts.vertical draws generations top -> bottom;
  * opts.timeAxis (vertical only) places each person exactly at the height of their birth year, with a decade scale;
- * opts.lifetime (with timeAxis) stretches each box down to the year of death, so its height is the length of life;
+ * opts.lifetime (with timeAxis) draws the life as a bar from birth to death (or today); the name label keeps a
+ * minimum height, so for a short life the part of the box past the bar is only a light label background;
  * vertical trees are packed sideways (packColumns), one generation does not have to share one row;
- * opts.offsets = { id: { dx, dy } } moves boxes by hand (export editor); opts.title adds a heading.
+ * opts.offsets = { id: { dx, dy } } moves boxes by hand (drag, export editor); opts.title adds a heading.
  */
-export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = false, mark = null, vertical = false, timeAxis = false, lifetime = false, isDead = null, ppy = 4, offsets = null, title = '' } = {}) {
+export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = false, mark = null, vertical = false, timeAxis = false, lifetime = false, isDead = null, ppy = 4, offsets = null, title = '', now = new Date().getFullYear() } = {}) {
   const h = spouse ? 46 : 34;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const vgx = 10, vgy = 34;
@@ -286,15 +307,16 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
   // raw positions: horizontal = generations are columns (left -> right); vertical = generations are rows (top -> bottom)
   let P = lay.nodes.map((n) => (vertical ? { x: n.y * (w + vgx), y: n.gen * (h + vgy) } : { x: n.gen * (w + gx), y: n.y * (h + gy) }));
   let yrs = null, y0 = 0, y1 = 0;
-  const H = lay.nodes.map(() => h), alive = lay.nodes.map(() => false);
+  // H = box height (never below the label height h); L = life bar height in px, or null when the end is unknown
+  const H = lay.nodes.map(() => h), L = lay.nodes.map(() => null), alive = lay.nodes.map(() => false);
   if (time) {
     yrs = nodeYears(model, lay);
     y0 = Math.floor(Math.min(...yrs.map((o) => o.year)) / 10) * 10;
     P = P.map((p, i) => ({ x: p.x, y: (yrs[i].year - y0) * ppy }));
     let last = Math.max(...yrs.map((o) => o.year));
     if (lifetime) lay.nodes.forEach((n, i) => {
-      const p = model.persons[n.id], e = endYear(p, yrs[i].est ? null : yrs[i].year, isDead ? isDead(p) : undefined);
-      if (e != null && e > yrs[i].year) { H[i] = Math.max(h, (e - yrs[i].year) * ppy); last = Math.max(last, e); alive[i] = !yearIn(p.death.date); }
+      const p = model.persons[n.id], e = endYear(p, yrs[i].est ? null : yrs[i].year, isDead ? isDead(p) : undefined, now);
+      if (e != null && e >= yrs[i].year) { L[i] = Math.max(3, (e - yrs[i].year) * ppy); H[i] = Math.max(h, L[i]); last = Math.max(last, e); alive[i] = !yearIn(p.death.date); }
     });
     y1 = Math.ceil(last / 10) * 10 + 10;
   }
@@ -302,7 +324,7 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
     const col = packColumns(lay, P.map((p, i) => [p.y, p.y + H[i]]), time ? 6 : 1);
     P = P.map((p, i) => ({ x: col[i] * (w + vgx), y: p.y }));
   }
-  if (offsets) P = P.map((p, i) => { const o = offsets[lay.nodes[i].id]; return o ? { x: p.x + o.dx, y: p.y + o.dy } : p; });
+  if (offsets) P = P.map((p, i) => { const o = offsets[lay.nodes[i].id]; return o ? { x: p.x + (o.dx || 0), y: p.y + (o.dy || 0) } : p; });
   const left = time ? 46 : 4, top = 4 + (title ? 34 : 0);
   const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
   // with hand offsets keep the automatic origin, so dragging one box never shifts the others
@@ -312,7 +334,7 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
   let width = maxX - minX + w + left + 4, height = maxY - minY + h + top + 4;
   if (time) height = Math.max(height, (y1 - y0) * ppy - minY + top + 4);
   if (title) width = Math.max(width, Math.min(900, 14 * title.length) + 8);
-  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui,Arial,sans-serif"><rect width="100%" height="100%" fill="#fff"/>`];
+  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui,Arial,sans-serif" data-w="${w}" data-h="${h}" data-mode="${vertical ? (time ? 't' : 'v') : 'h'}"><rect width="100%" height="100%" fill="#fff"/>`];
   if (title) parts.push(`<text x="${left}" y="26" font-size="22" font-weight="700" fill="#111">${esc(title)}</text>`);
   const axisLabels = [];
   if (time) {
@@ -322,23 +344,15 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
       parts.push(`<line class="axis" x1="${left - 6}" y1="${y}" x2="${width}" y2="${y}" stroke="#e7ded6" stroke-width="${yr % 50 ? 0.6 : 1.2}"/>`);
       axisLabels.push(`<rect x="1" y="${y - 7}" width="30" height="13" rx="3" fill="#fff" fill-opacity=".85"/><text x="4" y="${y + 4}" font-size="10" fill="#8a7b70">${yr}</text>`);
     }
-  }
-  for (const [a, b] of lay.links) {
-    const A = pos[a], B = pos[b];
-    if (vertical && B.y < A.y + H[a] + 8 && (B.x >= A.x + w || B.x + w <= A.x)) {
-      // child born while the parent's bar is still running: leave the bar from its side at the child's birth year
-      const right = B.x >= A.x + w, x1 = right ? A.x + w : A.x, x2 = B.x + w / 2;
-      const yb = Math.max(A.y + 10, Math.min(B.y - 8, A.y + H[a] - 4));
-      parts.push(`<path d="M${x1} ${yb} H${x2} V${B.y}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
-    } else if (vertical) {
-      const x1 = A.x + w / 2, y1 = A.y + H[a], x2 = B.x + w / 2, y2 = B.y;
-      const my = time ? Math.min(y1 + 12, y2 - 4) : (y1 + y2) / 2;
-      parts.push(`<path d="M${x1} ${y1} V${my} H${x2} V${y2}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
-    } else {
-      const x1 = A.x + w, y1 = A.y + h / 2, x2 = B.x, y2 = B.y + h / 2, mx = (x1 + x2) / 2;
-      parts.push(`<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
+    if (lifetime && now >= y0 && now <= y1) {
+      // "today": living people's bars end exactly here
+      const y = (now - y0) * ppy - minY + top;
+      parts.push(`<line class="today" x1="${left - 6}" y1="${y}" x2="${width}" y2="${y}" stroke="#c94a24" stroke-width="1" stroke-dasharray="6 4" stroke-opacity=".7"/>`);
+      axisLabels.push(`<rect x="1" y="${y - 7}" width="30" height="13" rx="3" fill="#c94a24"/><text x="5" y="${y + 3.5}" font-size="9.5" font-weight="700" fill="#fff">dziś</text>`);
     }
   }
+  const byId = lay.nodes.map((n) => esc(n.id));
+  for (const [a, b] of lay.links) parts.push(`<path data-a="${byId[a]}" data-b="${byId[b]}" d="${linkPath(pos[a], pos[b], H[a], { w, h, vertical, time })}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
   lay.nodes.forEach((n, i) => {
     const p = model.persons[n.id];
     const { x, y } = pos[i];
@@ -346,13 +360,25 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
     const stroke = mark && mark.has(n.id) ? '#c94a24' : p.sex === 'F' ? '#b5603a' : p.sex === 'M' ? '#3f5a46' : '#7d8d9e';
     const sw = mark && mark.has(n.id) ? 3 : 1;
     const est = yrs && yrs[i].est;
+    const dash = est ? ' stroke-dasharray="4 3"' : '';
     let sp = '';
     if (spouse) {
       const names = spousesOf(model, n.id).filter((s) => s.spouse).map((s) => displayName(model.persons[s.spouse])).join(', ');
       if (names) sp = `<text x="${x + 8}" y="${y + 41}" font-size="9.5" fill="#c94a24">⚭ ${esc(names.slice(0, 28))}</text>`;
     }
-    parts.push(`<g data-id="${esc(n.id)}">${est ? '<title>Rok urodzenia nieznany: miejsce na osi jest szacowane</title>' : ''}<rect x="${x}" y="${y}" width="${w}" height="${H[i]}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${est ? ' stroke-dasharray="4 3"' : ''}/>` +
-      (H[i] > h ? `<line x1="${x + 4}" y1="${y + h}" x2="${x + w - 4}" y2="${y + h}" stroke="${stroke}" stroke-opacity=".25"/>${alive[i] ? `<text x="${x + w / 2}" y="${y + H[i] - 5}" font-size="9" text-anchor="middle" fill="#666">żyje ↓</text>` : ''}` : '') +
+    let box;
+    // unknown end of life: no bar at all; past "today" only the light label box, so nobody seems to live in the future
+    const pastNow = time && lifetime && L[i] == null && yrs[i].year + h / ppy > now;
+    if (pastNow) box = `<rect class="lbl" x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="#fff" fill-opacity=".9" stroke="${stroke}" stroke-width="${sw}" stroke-dasharray="4 3"/>`;
+    else if (L[i] != null && L[i] < h) {
+      // short life: the coloured bar is the real life span, the rest is just room for the name
+      box = `<rect class="lbl" x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="#fff" fill-opacity=".9" stroke="${stroke}" stroke-opacity=".45" stroke-dasharray="2 3"/>` +
+        `<rect class="life" x="${x}" y="${y}" width="${w}" height="${L[i]}" rx="${Math.min(6, L[i] / 2)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${dash}/>`;
+    } else {
+      box = `<rect x="${x}" y="${y}" width="${w}" height="${H[i]}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${dash}/>` +
+        (H[i] > h ? `<line x1="${x + 4}" y1="${y + h}" x2="${x + w - 4}" y2="${y + h}" stroke="${stroke}" stroke-opacity=".25"/>${alive[i] && H[i] > h + 16 ? `<text x="${x + w / 2}" y="${y + H[i] - 5}" font-size="9" text-anchor="middle" fill="#666">żyje</text>` : ''}` : '');
+    }
+    parts.push(`<g data-id="${byId[i]}" data-h="${H[i]}">${est ? '<title>Rok urodzenia nieznany: miejsce na osi jest szacowane</title>' : ''}${box}` +
       `<text x="${x + 6}" y="${y + 14}" font-size="11" font-weight="600" fill="#111">${esc(displayName(p).slice(0, PICTO[p.sex] ? 22 : 25))}</text>` +
       `<text x="${x + 6}" y="${y + 27}" font-size="9.5" fill="#444">${esc(years(p))}</text>${sp}` +
       (PICTO[p.sex] ? `<path class="pic ${p.sex}" transform="translate(${x + w - 17} ${y + 4}) scale(.55)" fill="${p.sex === 'F' ? '#b5603a' : '#3f5a46'}" d="${PICTO[p.sex]}"/>` : '') + '</g>');

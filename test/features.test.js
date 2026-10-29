@@ -250,7 +250,7 @@ test('tree: time axis places people by birth year, estimates missing years, hono
   assert.equal(yrs[idx(adam)].year, 1900); assert.equal(yrs[idx(adam)].est, false);
   assert.equal(yrs[idx(zosia)].est, true); assert.equal(yrs[idx(zosia)].year, 1932 + 28);
   const svg = layoutToSvg(m, lay, { spouse: true, vertical: true, timeAxis: true });
-  const yOf = (s, id) => +s.match(new RegExp(`data-id="${id}">(?:<title>[^<]*</title>)?<rect x="[\\d.-]+" y="([\\d.-]+)"`))[1];
+  const yOf = (s, id) => +s.match(new RegExp(`data-id="${id}"[^>]*>(?:<title>[^<]*</title>)?<rect x="[\\d.-]+" y="([\\d.-]+)"`))[1];
   assert.ok(yOf(svg, piotr) - yOf(svg, adam) >= (1960 - 1900) * 4 - 1, '60 years apart = 240px at 4 px/year');
   assert.match(svg, />1900</); assert.match(svg, /stroke-dasharray="4 3"/);
   const moved = layoutToSvg(m, lay, { spouse: true, vertical: true, timeAxis: true, offsets: { [piotr]: { dx: 0, dy: 50 } }, title: 'Rodzina <Nowaków>' });
@@ -267,8 +267,8 @@ test('tree: time axis is exact, columns are packed, lifetime stretches boxes', a
   const kids = [P('X', 'M', '1880', '1950'), P('Y', 'F', '1881', '1960'), P('Z', 'M', '1883')];
   for (const k of kids) addChild(m, fid, k);
   const lay = layoutForest(m);
-  const yOf = (s, id) => +s.match(new RegExp(`data-id="${id}">(?:<title>[^<]*</title>)?<rect x="[\\d.-]+" y="([\\d.-]+)"`))[1];
-  const hOf = (s, id) => +s.match(new RegExp(`data-id="${id}">(?:<title>[^<]*</title>)?<rect [^>]*height="([\\d.]+)"`))[1];
+  const yOf = (s, id) => +s.match(new RegExp(`data-id="${id}"[^>]*>(?:<title>[^<]*</title>)?<rect x="[\\d.-]+" y="([\\d.-]+)"`))[1];
+  const hOf = (s, id) => +s.match(new RegExp(`data-id="${id}"[^>]*>(?:<title>[^<]*</title>)?<rect [^>]*height="([\\d.]+)"`))[1];
   const svg = layoutToSvg(m, lay, { spouse: true, vertical: true, timeAxis: true });
   // siblings born 1, 3 years apart: no pushing down, each sits exactly on its birth year
   assert.equal(yOf(svg, kids[1]) - yOf(svg, kids[0]), 4); assert.equal(yOf(svg, kids[2]) - yOf(svg, kids[0]), 12);
@@ -281,6 +281,50 @@ test('tree: time axis is exact, columns are packed, lifetime stretches boxes', a
   const lay2 = { nodes: [{ id: 'r' }, { id: 'c1' }, { id: 'c2' }, { id: 'g' }], links: [[0, 1], [0, 2], [1, 3]] };
   const col = packColumns(lay2, [[0, 40], [100, 140], [100, 140], [200, 240]]);
   assert.notEqual(col[1], col[2]); assert.ok(Math.max(...col) <= 1, 'three generations fit in two columns');
+});
+
+test('tree: young people end at today, short lives get a short bar inside a label box', async () => {
+  const { layoutForest, layoutToSvg } = await import('../public/tree.js');
+  const m = emptyModel();
+  const P = (g, sex, b, d = '') => { const id = addPerson(m, { given: g, surname: 'B', sex }); m.persons[id].birth.date = b; m.persons[id].death.date = d; return id; };
+  const mum = P('Ala', 'F', '1990'), gaja = P('Gaja', 'F', '2021'), baby = P('Hugo', 'M', '1950', '1951');
+  addChild(m, addSpouse(m, mum, null), gaja); addChild(m, addSpouse(m, P('Ojciec', 'M', '1920', '1990'), null), baby);
+  const svg = layoutToSvg(m, layoutForest(m), { spouse: true, vertical: true, timeAxis: true, lifetime: true, now: 2026 });
+  const g = (id) => svg.match(new RegExp(`<g data-id="${id}"[^>]*>.*?</g>`))[0];
+  const life = (id) => +g(id).match(/class="life" [^>]*height="([\d.]+)"/)[1];
+  assert.equal(life(gaja), 5 * 4, 'born 2021, today 2026: 5 years = 20 px, not the 46 px label');
+  assert.equal(life(baby), 4, 'one year of life');
+  assert.match(g(gaja), /class="lbl"/); assert.doesNotMatch(g(mum), /class="lbl"/);
+  assert.match(svg, />dziś</);
+  assert.match(svg, /<path data-a="[^"]+" data-b="[^"]+" d="M/);
+});
+
+test('springs: dragging pulls relatives along and never lets same-time boxes overlap', async () => {
+  const { springState, springStep } = await import('../public/tree_springs.js');
+  // parent 0 with kids 1, 2 (same years, side by side); 3 lives at another time
+  const boxes = [{ x: 80, y: 0, H: 40 }, { x: 0, y: 100, H: 40 }, { x: 160, y: 100, H: 40 }, { x: 600, y: 300, H: 40 }];
+  const st = springState(boxes, [[0, 1], [0, 2]], 150);
+  assert.deepEqual(st.pairs, [[1, 2]]);
+  st.pinned.add(1); st.x[1] = 300; // drag kid 1 to the right, onto kid 2
+  for (let k = 0; k < 400; k++) springStep(st);
+  assert.ok(Math.abs(st.x[2] - st.x[1]) >= 158 - 1e-6, 'siblings pushed apart');
+  assert.ok(st.x[0] > 80 + 50, 'parent followed on the spring');
+  assert.ok(Math.abs(st.x[3] - 600) < 1e-9, 'unrelated, not overlapping: untouched');
+});
+
+test('missing data form: best questions first, death only for the dead, skips honoured', async () => {
+  const { missingQuestions, whoIs, isMissing } = await import('../public/missing.js');
+  const { m, jan, ola, maria, piotr } = family();
+  m.persons[ola].birth.date = ''; m.persons[piotr].given = '';
+  const qs = missingQuestions(m, { now: NOW });
+  assert.equal(qs[0].field, 'given'); assert.equal(qs[0].id, piotr);
+  assert.equal(qs[1].field, 'birth.date'); assert.equal(qs[1].id, ola);
+  assert.ok(!qs.some((q) => q.id === maria && q.field === 'death.date'), 'Maria born 1932, no death record: may be alive');
+  assert.ok(qs.some((q) => q.id === jan && q.field === 'death.place'));
+  assert.equal(isMissing(m.persons[jan], 'birth.date', NOW), false);
+  const skipped = new Set([`${piotr}:given`]);
+  assert.notEqual(missingQuestions(m, { now: NOW, skipped })[0].id, piotr);
+  assert.match(whoIs(m, jan), /syn: Adam Nowak i Ewa Nowak/); assert.match(whoIs(m, jan), /mąż: Ola Nowak/);
 });
 
 test('export: subtree ids and a valid one-page JPEG PDF', async () => {

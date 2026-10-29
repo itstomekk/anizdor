@@ -1,7 +1,7 @@
 // Small person popover: shown when a person is clicked in the tree views. The full card opens only on request.
 import { el, avatar } from './ui.js';
 import { displayName, years, parentsOf, spousesOf, childrenOf } from './tree.js';
-import { formatDate, yearOf } from './dates.js';
+import { formatDate, yearOf, toGedcomDate } from './dates.js';
 
 let current = null;
 
@@ -15,6 +15,7 @@ export function closePersonPop() {
  * ctx: { model(), goPerson(id) }. anchor: element or DOMRect to place the popover next to.
  * opts.onRelative(id): called when a relative's name is clicked (default: show that person's popover in place).
  * opts.extra: optional array of extra buttons.
+ * opts.reopen(id): called after a quick edit is saved (the view re-renders), to show the popover again.
  */
 export function showPersonPop(ctx, id, anchor, opts = {}) {
   closePersonPop();
@@ -38,7 +39,33 @@ export function showPersonPop(ctx, id, anchor, opts = {}) {
     row(parents.length > 1 ? 'Rodzice:' : 'Rodzic:', list(parents)),
     row(partners.length > 1 ? 'Partnerzy:' : 'Partner:', list(partners)),
     row(`Dzieci (${kids.length}):`, list(kids)),
-    el('div', { class: 'pp-btns' }, el('button', { class: 'primary', onclick: () => { closePersonPop(); ctx.goPerson(id); } }, 'Otwórz kartę'), opts.extra || null));
+    el('div', { class: 'pp-btns' }, el('button', { class: 'primary', onclick: () => { closePersonPop(); ctx.goPerson(id); } }, 'Otwórz kartę'),
+      ctx.mutate ? el('button', { title: 'Popraw imię, nazwisko, płeć, daty i miejsca bez wychodzenia z drzewa', onclick: () => quickEdit() }, '✎ Edytuj') : null, opts.extra || null));
+  // quick edit: the same box turns into a small form; Enter saves, Esc closes
+  function quickEdit() {
+    const f = (label, value, ph = '') => { const i = el('input', { value: value || '', placeholder: ph }); return [i, el('label', { class: 'pp-f' }, el('span', { class: 'mut' }, label), i)]; };
+    const [gi, gl] = f('Imię', p.given), [si, sl] = f('Nazwisko', p.surname);
+    const [bd, bdl] = f('Urodzenie', p.birth.date, 'np. 12.03.1950'), [bp, bpl] = f('Miejsce ur.', p.birth.place);
+    const [dd, ddl] = f('Śmierć', p.death.date, 'np. 1999 lub ok. 1930'), [dp, dpl] = f('Miejsce zm.', p.death.place);
+    const sx = el('select', {}, [['', '?'], ['M', 'mężczyzna'], ['F', 'kobieta'], ['U', 'inna']].map(([v, t]) => el('option', { value: v, selected: (p.sex || '') === v }, t)));
+    const save = () => {
+      ctx.mutate(() => {
+        p.given = gi.value.trim(); p.surname = si.value.trim(); p.sex = sx.value;
+        p.birth.date = toGedcomDate(bd.value); p.birth.place = bp.value.trim();
+        p.death.date = toGedcomDate(dd.value); p.death.place = dp.value.trim();
+      });
+      closePersonPop();
+      ctx.say?.(`Zapisano: ${displayName(p)}. Cofnij: Ctrl+Z.`);
+      opts.reopen?.(id);
+    };
+    const form = el('form', { class: 'pp-form', onsubmit: (e) => { e.preventDefault(); save(); } },
+      el('div', { class: 'pp-grid' }, gl, sl, bdl, bpl, ddl, dpl, el('label', { class: 'pp-f' }, el('span', { class: 'mut' }, 'Płeć'), sx)),
+      el('div', { class: 'pp-btns' }, el('button', { class: 'primary', type: 'submit' }, 'Zapisz'), el('button', { type: 'button', onclick: closePersonPop }, 'Anuluj')));
+    box.replaceChildren(box.firstChild, form);
+    const r = box.getBoundingClientRect();
+    if (r.bottom > innerHeight - 8) box.style.top = Math.max(8, innerHeight - r.height - 8) + 'px';
+    gi.focus();
+  }
   document.body.append(box);
   // place: right of the anchor if it fits, else left, else below; always inside the viewport
   const vw = innerWidth, vh = innerHeight, bw = box.offsetWidth, bh = box.offsetHeight;

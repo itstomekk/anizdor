@@ -28,8 +28,9 @@ The name is **RODZINA** (Polish for "family") read backwards. The app interface 
 ## ✨ What you can do
 
 - 👤 **Edit people**: names, dates (type `12.03.1950` and it just works), places, events, notes, parents, partners, children. Undo and redo with Ctrl+Z / Ctrl+Y.
-- 🌳 **See the tree your way**: the classic family board, a **vertical tree laid out on a birth-year axis** (optionally with each box as tall as that person's life), a **galaxy** with one person in the centre and relatives around them, and an **ancestor fan** with up to 9 generations.
-- 🖱️ **Click anyone in the tree** for a quick popup with the essentials, no need to leave the chart.
+- 🌳 **See the tree your way**: the classic family board, a **vertical tree on a birth-year axis** where each box is as tall as that person's life (drag people sideways, relatives follow like on springs), a **galaxy** with one person in the centre and relatives around them, and an **ancestor fan** with up to 9 generations.
+- 🖱️ **Click anyone in the tree** for a quick popup with the essentials, and fix names, dates and places right there.
+- 📝 **Fill in the gaps**: a short form with the most important missing facts (birth years, surnames, places), handy when you sit down with grandma.
 - ⏳ **Life lines and timeline**: bars from birth to death show **who lived at the same time**, with Polish and world history in the background.
 - 📊 **Statistics**: surnames, given names, lifespans, births and deaths by decade, family size, generations, and more.
 - 🩺 **Data checks with auto-repair**: impossible dates, parents younger than their children, duplicates (merge in one click), broken links. Safe problems can be fixed automatically.
