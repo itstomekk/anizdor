@@ -228,7 +228,7 @@ function personPanel(panel, id, tab) {
   const svgText = layoutToSvg(model, lay, { spouse: tab === 'desc', mark: new Set([id]) });
   mountSvg(canvas, svgText, (gid) => goPerson(gid));
   panel.append(el('div', { class: 'treebar' }, el('label', {}, 'Pokolenia ', gens), el('span', { class: 'mut' }, `${lay.nodes.length} osób`),
-    el('button', { onclick: () => download(`drzewo-${tab}-${strip(id)}.svg`, svgText, 'image/svg+xml') }, 'Pobierz SVG'), el('button', { onclick: () => print() }, 'Drukuj / PDF')), canvas);
+    el('button', { onclick: () => download(`drzewo-${tab}-${strip(id)}.svg`, svgText, 'image/svg+xml') }, 'SVG'), el('button', { onclick: () => print() }, 'Drukuj')), canvas);
 }
 
 function mountSvg(canvas, svgText, onNode) {
@@ -295,7 +295,7 @@ function viewClassic(main, head) {
     svgNode = mountSvg(canvas, svgText, (gid) => goPerson(gid));
     zoomTo(ui.zoom);
   };
-  const zl = el('span', { class: 'mut' }, '');
+  const zl = el('button', { class: 'zl', title: 'Powiększenie 100%', onclick: () => zoomTo(1) }, '');
   const find = el('input', { type: 'search', placeholder: 'Podświetl osobę…', value: ui.find, style: '', oninput: (e) => {
     ui.find = e.target.value; mark.clear();
     const toks = fold(ui.find).split(/\s+/).filter(Boolean);
@@ -314,12 +314,12 @@ function viewClassic(main, head) {
     info.textContent = `Znaleziono: ${hits.length} (pokazano ${cur + 1})`;
   };
   const fit = () => { const vb = svgNode.viewBox.baseVal; zoomTo((canvas.clientWidth - 8) / vb.width); };
-  main.replaceChildren(el('div', { class: 'card', style: 'margin-top:.5rem' },
-    el('h2', {}, 'Drzewo rodziny'), head,
-    el('p', { class: 'mut' }, `${lay.nodes.length} osób w ${lay.trees} gałęziach (potomkowie osób bez znanych rodziców; partnerzy pod ⚭; niebieski = mężczyzna, różowy = kobieta). ${lay.alone ? lay.alone + ' osób bez powiązań nie jest narysowanych.' : ''} Kliknij osobę, aby otworzyć jej kartę.`),
-    el('div', { class: 'treebar' }, find, el('button', { onclick: nextMatch }, 'Następny'), info, el('button', { onclick: () => zoomTo(ui.zoom - 0.15), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => zoomTo(ui.zoom + 0.15), title: 'Powiększ' }, '+'), el('button', { onclick: () => zoomTo(1) }, '100%'), el('button', { onclick: fit }, 'Dopasuj szerokość'),
+  main.replaceChildren(el('div', { class: 'card', style: 'margin-top:.3rem' },
+    head,
+    el('p', { class: 'mut treeinfo', title: 'Gałęzie to potomkowie osób bez znanych rodziców.' }, `${lay.nodes.length} osób · gałęzie: ${lay.trees} · ⚭ partner${lay.alone ? ` · ${lay.alone} bez powiązań (nienarysowani)` : ''} · kliknij osobę, aby otworzyć kartę`),
+    el('div', { class: 'treebar' }, find, el('button', { onclick: nextMatch }, 'Następny'), info, el('button', { onclick: () => zoomTo(ui.zoom - 0.15), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => zoomTo(ui.zoom + 0.15), title: 'Powiększ' }, '+'), el('button', { onclick: fit, title: 'Dopasuj do szerokości ekranu' }, 'Dopasuj'),
       el('button', { class: 'dir', title: 'Obróć układ drzewa', 'aria-pressed': String(ui.vertical), onclick: (e) => { ui.vertical = !ui.vertical; try { localStorage.setItem('rodzina.treeDir', ui.vertical ? 'v' : 'h'); } catch {} e.currentTarget.textContent = ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'; e.currentTarget.setAttribute('aria-pressed', String(ui.vertical)); draw(); } }, ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'),
-      el('button', { onclick: () => download('tablica-rodziny.svg', svgText, 'image/svg+xml') }, 'Pobierz SVG'), el('button', { onclick: () => print() }, 'Drukuj / PDF')),
+      el('button', { onclick: () => download('drzewo-rodziny.svg', svgText, 'image/svg+xml') }, 'SVG'), el('button', { onclick: () => print(), title: 'Drukuj albo zapisz jako PDF' }, 'Drukuj')),
     canvas));
   draw();
   if (ui.find) find.dispatchEvent(new Event('input'));
@@ -336,7 +336,7 @@ function viewStats(main) {
     { name: 'zmarli', n: t.life.dead + t.life['probably-dead'], color: 'var(--c-dead, #7d8da6)' },
     { name: 'żyjący', n: t.life.living, color: 'var(--c-live, #2f9e6b)' },
     { name: 'brak danych', n: t.life['unknown-living'], color: 'var(--c-unk, #d9a441)' }];
-  main.replaceChildren(el('div', { style: 'margin-top:.5rem' },
+  main.replaceChildren(el('div', { style: 'margin-top:.3rem' },
     el('div', { class: 'tiles' },
       tile(t.persons, 'osób'), tile(t.families, 'rodzin'), tile(s.generations.max, 'pokoleń (najdłuższa linia)'), tile(s.surnameCount, 'różnych nazwisk'),
       tile(s.span ? `${s.span.from}–${s.span.to}` : '–', 'zakres lat urodzin'), tile(nf(s.family.avgChildren), 'dzieci na rodzinę z dziećmi')),
@@ -402,7 +402,7 @@ function viewChecks(main) {
   const hidden = issues().length - all.length;
   const sevName = { err: 'Błędy', warn: 'Ostrzeżenia', info: 'Wskazówki' };
   const cnt = (s) => all.filter((i) => i.sev === s).length;
-  main.replaceChildren(el('div', { style: 'margin-top:.5rem' },
+  main.replaceChildren(el('div', { style: 'margin-top:.3rem' },
     el('h2', {}, 'Kontrola danych'),
     el('p', { class: 'mut' }, `Błędy: ${cnt('err')} · ostrzeżenia: ${cnt('warn')} · wskazówki: ${cnt('info')}. To podpowiedzi, nie wyroki: prawdziwe rodziny bywają nietypowe. „Ignoruj” ukrywa daną uwagę na stałe w tej przeglądarce.`),
     (() => {
@@ -469,7 +469,7 @@ function viewTools(main) {
   const calc = () => { res.replaceChildren(); if (A.value && B.value) res.append(el('div', { class: 'result' }, relate(model, A.value, B.value).text)); };
   A.addEventListener('change', calc); B.addEventListener('change', calc);
   const living = Object.values(model.persons).filter((p) => isLiving(p)).length;
-  main.replaceChildren(el('div', { class: 'cols', style: 'margin-top:.5rem' },
+  main.replaceChildren(el('div', { class: 'cols', style: 'margin-top:.3rem' },
     card('Kalkulator pokrewieństwa', el('p', { class: 'mut' }, 'Wybierz dwie osoby. Szukam najbliższego wspólnego przodka.'), el('div', { class: 'row' }, el('label', { class: 'mut' }, 'Osoba 1', A), el('label', { class: 'mut' }, 'Osoba 2', B)), res),
     card('Najbliższe urodziny', upcomingBox(12, false)),
     card('Chmura (szyfrowana)', cloud.mount()),

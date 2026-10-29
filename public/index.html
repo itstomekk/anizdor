@@ -28,8 +28,8 @@
   <div class="actions">
     <button id="undo" title="Cofnij (Ctrl+Z)" disabled>↶</button>
     <button id="redo" title="Ponów (Ctrl+Y)" disabled>↷</button>
-    <label class="btn primary">Wczytaj<span class="long"> .ged / .zip</span><input id="file" type="file" accept=".ged,.gedcom,.zip,text/plain,application/zip" hidden></label>
-    <button id="export" disabled>Pobierz .ged</button>
+    <label class="btn primary icb" title="Wczytaj plik .ged lub .zip (ze zdjęciami)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M5 15v4h14v-4"/></svg><span class="lbl">Wczytaj</span><input id="file" type="file" accept=".ged,.gedcom,.zip,text/plain,application/zip" hidden></label>
+    <button id="export" class="icb" title="Pobierz drzewo jako plik .ged" aria-label="Pobierz .ged" disabled><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 15v4h14v-4"/></svg><span class="lbl">Pobierz</span></button>
     <button id="cloud" class="cloud-btn" type="button">☁</button>
     <button id="theme" title="Jasny / ciemny motyw" aria-label="Zmień motyw">◐</button>
   </div>

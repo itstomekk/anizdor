@@ -221,7 +221,7 @@ function fanView(main, ctx, focus, { head, download }) {
     opt('Kształt', 0, st.shape, (v) => { st.shape = v; ctx.render(); }, [['full', 'pełne koło'], ['half', 'półkole']]),
     opt('Kolory', 0, st.color, (v) => { st.color = v; ctx.render(); }, [['gen', 'pokolenia'], ['sex', 'płeć'], ['data', 'kompletność danych']]),
     el('button', { onclick: () => vp.zoomAt(0.8), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => vp.zoomAt(1.25), title: 'Powiększ' }, '+'), el('button', { onclick: () => vp.fit() }, 'Dopasuj'),
-    el('button', { onclick: () => exportSvg(root, box, `wachlarz-${strip(focus)}.svg`, ctx, download) }, 'Pobierz SVG'), el('button', { onclick: () => print() }, 'Drukuj / PDF'));
+    el('button', { onclick: () => exportSvg(root, box, `wachlarz-${strip(focus)}.svg`, ctx, download) }, 'SVG'), el('button', { onclick: () => print() }, 'Drukuj'));
   const legend = st.color === 'data'
     ? el('div', { class: 'vizlegend' }, el('span', { class: 'sw lv-full' }), ' data i miejsce urodzenia ', el('span', { class: 'sw lv-part' }), ' jedno z dwóch ', el('span', { class: 'sw lv-none' }), ' brak obu ', el('span', { class: 'sw empty' }), ' brak rodzica w danych')
     : st.color === 'sex' ? el('div', { class: 'vizlegend' }, el('span', { class: 'sw M' }), ' mężczyzna ', el('span', { class: 'sw F' }), ' kobieta ', el('span', { class: 'sw empty' }), ' brak rodzica w danych')
@@ -306,7 +306,7 @@ function galaxyView(main, ctx, focus, { head, download }) {
     opt('Kroki', 0, st.hops, (v) => { st.hops = +v; ctx.render(); }, [1, 2, 3, 4, 5, 6].map((n) => [n, n])),
     opt('Kto', 0, st.dir, (v) => { st.dir = v; ctx.render(); }, [['all', 'wszyscy krewni'], ['anc', 'tylko przodkowie'], ['desc', 'tylko potomkowie']]),
     el('button', { onclick: () => vp.zoomAt(0.8), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => vp.zoomAt(1.25), title: 'Powiększ' }, '+'), el('button', { onclick: reset }, 'Dopasuj i ułóż od nowa'),
-    el('button', { onclick: () => exportSvg(root, box, `galaktyka-${strip(focus)}.svg`, ctx, download) }, 'Pobierz SVG'), el('button', { onclick: () => print() }, 'Drukuj / PDF'));
+    el('button', { onclick: () => exportSvg(root, box, `galaktyka-${strip(focus)}.svg`, ctx, download) }, 'SVG'), el('button', { onclick: () => print() }, 'Drukuj'));
   const legend = el('div', { class: 'vizlegend' }, el('span', { class: 'sw M' }), ' mężczyzna ', el('span', { class: 'sw F' }), ' kobieta ', el('span', { class: 'sw U' }), ' brak płci ', el('span', { class: 'ln parent' }), ' rodzic–dziecko ', el('span', { class: 'ln spouse' }), ' partnerzy');
   main.replaceChildren(el('div', { class: 'card', style: 'margin-top:.5rem' }, el('h2', {}, 'Galaktyka rodziny'), head,
     el('p', { class: 'mut' }, note, ' Przeciągnij gwiazdę, aby ją przesunąć (tylko w widoku). Przeciągnij tło lub użyj kółka myszy. Kliknięcie: karta osoby. Dwuklik: ta osoba w centrum.'),
