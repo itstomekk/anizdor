@@ -226,3 +226,16 @@ test('stats: moreStats', async () => {
   assert.equal(s.sharedBirthdays[0].length, 2);
   assert.equal(s.surnameEndings[0].name, '-ski / -cki');
 });
+
+test('tree: vertical layout puts generations in rows', async () => {
+  const { layoutForest, layoutToSvg } = await import('../public/tree.js');
+  const m = emptyModel();
+  const a = addPerson(m, { given: 'Jan', surname: 'A', sex: 'M' }), b = addPerson(m, { given: 'Ewa', surname: 'A', sex: 'F' });
+  addSpouse(m, a, b); const fid = Object.keys(m.families)[0];
+  for (const g of ['X', 'Y']) addChild(m, fid, addPerson(m, { given: g, surname: 'A', sex: 'M' }));
+  const lay = layoutForest(m);
+  const dims = (svg) => svg.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/).slice(1).map(Number);
+  const [hw, hh] = dims(layoutToSvg(m, lay, { spouse: true })), [vw, vh] = dims(layoutToSvg(m, lay, { spouse: true, vertical: true }));
+  assert.ok(hw > hh, 'horizontal is wide'); assert.ok(vh > 46 * 2, 'vertical stacks 2 generations'); assert.ok(vw > 150 * 2, 'children side by side');
+  assert.match(layoutToSvg(m, lay, { vertical: true }), /d="M\d+(\.\d+)? \d+(\.\d+)? V/);
+});

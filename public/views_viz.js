@@ -7,7 +7,7 @@ import { photoUrl } from './media.js';
 import { fanLayout, arcPath, ringRadii, galaxyGraph, layoutGalaxy, bbox, clampView, dataLevel } from './visualizations.js';
 
 const strip = (id) => id.replace(/@/g, '');
-const TABS = [['galaktyka', 'Galaktyka'], ['wachlarz', 'Wachlarz przodków'], ['klasyczne', 'Drzewo klasyczne']];
+const TABS = [['klasyczne', 'Drzewo'], ['galaktyka', 'Galaktyka'], ['wachlarz', 'Wachlarz przodków']];
 export const VIZ_DEFAULTS = { depth: 5, shape: 'full', color: 'gen', hops: 4, dir: 'all' };
 
 /** Pan / zoom for an SVG inside `host`. The viewBox always matches the host's aspect ratio, so maths stays linear. */
@@ -318,7 +318,7 @@ function galaxyView(main, ctx, focus, { head, download }) {
 /** Tablica: tabs + focus person. `classic(main, head)` renders the old whole-family board. */
 export function viewBoard(main, r, ctx, { classic, download }) {
   const m = ctx.model();
-  const tab = TABS.some(([t]) => t === r.a) ? r.a : 'galaktyka';
+  const tab = TABS.some(([t]) => t === r.a) ? r.a : 'klasyczne';
   const wanted = r.b && m.persons[`@${r.b}@`] ? `@${r.b}@` : null;
   const focus = wanted || (m.persons[ctx.ui.focus] ? ctx.ui.focus : ctx.defaultFocus());
   ctx.ui.focus = focus;

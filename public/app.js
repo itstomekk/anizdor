@@ -17,7 +17,8 @@ const KEY = 'rodzina.ged.v1';
 let model = emptyModel();
 const adopt = (m) => { ensureExt(m); return m; };
 let version = 0;
-const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '' };
+const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '', vertical: false };
+try { ui.vertical = localStorage.getItem('rodzina.treeDir') === 'v'; } catch {}
 const undoStack = [], redoStack = [];
 const memo = { v: -1, stats: null, issues: null };
 let ignored = new Set();
@@ -54,7 +55,7 @@ function mutate(fn, { keepView = true } = {}) {
 function applyRemote(text) {
   if (count()) { undoStack.push(snapshot()); if (undoStack.length > 40) undoStack.shift(); redoStack.length = 0; }
   model = adopt(parseGedcom(text)); version++; saveNow(); refreshBadge(); updateUndoButtons();
-  if (!location.hash && count()) location.hash = '#/osoby'; else render();
+  if (!location.hash && count()) location.hash = '#/tablica'; else render();
 }
 const cloud = createCloud({
   text: () => serializeGedcom(model), count: () => count(), apply: applyRemote,
@@ -79,7 +80,7 @@ const issues = () => { stats(); return memo.issues || (memo.issues = runChecks(m
 function refreshBadge() { const b = $('issues'); const n = count() ? issues().filter((i) => i.sev !== 'info' && !ignored.has(issueKey(i))).length : 0; b.hidden = !n; b.textContent = n; }
 
 // ---------- routing ----------
-const route = () => { const [v, a, b] = location.hash.replace(/^#\/?/, '').split('/'); return { view: v || 'osoby', a, b }; };
+const route = () => { const [v, a, b] = location.hash.replace(/^#\/?/, '').split('/'); return { view: v || 'tablica', a, b }; };
 const go = (path) => { if (location.hash === '#/' + path) render(); else location.hash = '#/' + path; };
 const goPerson = (id, tab = 'info') => go(`osoby/${strip(id)}/${tab}`);
 
@@ -290,7 +291,7 @@ function viewClassic(main, head) {
     zl.textContent = Math.round(ui.zoom * 100) + '%';
   };
   const draw = () => {
-    svgText = layoutToSvg(model, lay, { spouse: true, mark });
+    svgText = layoutToSvg(model, lay, { spouse: true, mark, vertical: ui.vertical });
     svgNode = mountSvg(canvas, svgText, (gid) => goPerson(gid));
     zoomTo(ui.zoom);
   };
@@ -314,9 +315,10 @@ function viewClassic(main, head) {
   };
   const fit = () => { const vb = svgNode.viewBox.baseVal; zoomTo((canvas.clientWidth - 8) / vb.width); };
   main.replaceChildren(el('div', { class: 'card', style: 'margin-top:.5rem' },
-    el('h2', {}, 'Tablica rodziny'), head,
+    el('h2', {}, 'Drzewo rodziny'), head,
     el('p', { class: 'mut' }, `${lay.nodes.length} osób w ${lay.trees} gałęziach (potomkowie osób bez znanych rodziców; partnerzy pod ⚭; niebieski = mężczyzna, różowy = kobieta). ${lay.alone ? lay.alone + ' osób bez powiązań nie jest narysowanych.' : ''} Kliknij osobę, aby otworzyć jej kartę.`),
     el('div', { class: 'treebar' }, find, el('button', { onclick: nextMatch }, 'Następny'), info, el('button', { onclick: () => zoomTo(ui.zoom - 0.15), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => zoomTo(ui.zoom + 0.15), title: 'Powiększ' }, '+'), el('button', { onclick: () => zoomTo(1) }, '100%'), el('button', { onclick: fit }, 'Dopasuj szerokość'),
+      el('button', { class: 'dir', title: 'Obróć układ drzewa', 'aria-pressed': String(ui.vertical), onclick: (e) => { ui.vertical = !ui.vertical; try { localStorage.setItem('rodzina.treeDir', ui.vertical ? 'v' : 'h'); } catch {} e.currentTarget.textContent = ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'; e.currentTarget.setAttribute('aria-pressed', String(ui.vertical)); draw(); } }, ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'),
       el('button', { onclick: () => download('tablica-rodziny.svg', svgText, 'image/svg+xml') }, 'Pobierz SVG'), el('button', { onclick: () => print() }, 'Drukuj / PDF')),
     canvas));
   draw();
@@ -502,7 +504,7 @@ async function importFile(f) {
     for (const ph of photos) { const id = ph.name.replace(/^photos\//, '').replace(/\.[^.]+$/, ''); const ext = ph.name.split('.').pop().toLowerCase(); await putPhoto(id, new Blob([ph.data], { type: { png: 'image/png', webp: 'image/webp', gif: 'image/gif' }[ext] || 'image/jpeg' })); }
     const bad = validate(m);
     say(`Wczytano ${f.name}: ${n} osób, ${Object.keys(m.families).length} rodzin` + (photos.length ? `, zdjęć: ${photos.length}` : '') + (bad.length ? `, uszkodzonych powiązań: ${bad.length}` : '') + '.');
-    go('osoby');
+    go('tablica');
   } catch (e) { say('Błąd wczytywania: ' + e.message); }
 }
 
@@ -536,7 +538,7 @@ try {
   if (t) { model = adopt(parseGedcom(t)); if (count()) say(`Wczytano z przeglądarki: ${count()} osób.`); }
 } catch (e) { say('Nie udało się odczytać zapisanych danych: ' + e.message); }
 if (count()) refreshBadge();
-if (!location.hash && count()) location.hash = '#/osoby';
+if (!location.hash && count()) location.hash = '#/tablica';
 render();
 cloud.start();
 window.__app = { get model() { return model; }, get version() { return version; } };

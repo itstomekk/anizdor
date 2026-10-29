@@ -201,34 +201,42 @@ export const PICTO = {
 };
 
 /** Render a layout to an SVG string (labels escaped). opts.spouse adds a "⚭ partner" line; opts.mark highlights ids. */
-export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = false, mark = null } = {}) {
+export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = false, mark = null, vertical = false } = {}) {
   const h = spouse ? 46 : 34;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const maxGen = Math.max(0, ...lay.nodes.map((n) => n.gen));
-  const X = (g) => 4 + g * (w + gx);
-  const Y = (r) => 4 + r * (h + gy);
   const maxRow = Math.max(0, ...lay.nodes.map((n) => n.y));
-  const width = X(maxGen) + w + 4, height = Y(maxRow) + h + 4;
+  // horizontal: generations are columns (left -> right); vertical: generations are rows (top -> bottom)
+  const vgx = 10, vgy = 34;
+  const pos = (n) => (vertical ? { x: 4 + n.y * (w + vgx), y: 4 + n.gen * (h + vgy) } : { x: 4 + n.gen * (w + gx), y: 4 + n.y * (h + gy) });
+  const width = vertical ? 4 + maxRow * (w + vgx) + w + 4 : 4 + maxGen * (w + gx) + w + 4;
+  const height = vertical ? 4 + maxGen * (h + vgy) + h + 4 : 4 + maxRow * (h + gy) + h + 4;
   const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui,Arial,sans-serif"><rect width="100%" height="100%" fill="#fff"/>`];
   for (const [a, b] of lay.links) {
-    const A = lay.nodes[a], B = lay.nodes[b];
-    const x1 = X(A.gen) + w, y1 = Y(A.y) + h / 2, x2 = X(B.gen), y2 = Y(B.y) + h / 2, mx = (x1 + x2) / 2;
-    parts.push(`<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
+    const A = pos(lay.nodes[a]), B = pos(lay.nodes[b]);
+    if (vertical) {
+      const x1 = A.x + w / 2, y1 = A.y + h, x2 = B.x + w / 2, y2 = B.y, my = (y1 + y2) / 2;
+      parts.push(`<path d="M${x1} ${y1} V${my} H${x2} V${y2}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
+    } else {
+      const x1 = A.x + w, y1 = A.y + h / 2, x2 = B.x, y2 = B.y + h / 2, mx = (x1 + x2) / 2;
+      parts.push(`<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
+    }
   }
   for (const n of lay.nodes) {
     const p = model.persons[n.id];
+    const { x, y } = pos(n);
     const fill = p.sex === 'F' ? '#f8e0cf' : p.sex === 'M' ? '#e2eadf' : '#e8ecf0';
     const stroke = mark && mark.has(n.id) ? '#c94a24' : p.sex === 'F' ? '#b5603a' : p.sex === 'M' ? '#3f5a46' : '#7d8d9e';
     const sw = mark && mark.has(n.id) ? 3 : 1;
     let sp = '';
     if (spouse) {
       const names = spousesOf(model, n.id).filter((s) => s.spouse).map((s) => displayName(model.persons[s.spouse])).join(', ');
-      if (names) sp = `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 41}" font-size="9.5" fill="#c94a24">⚭ ${esc(names.slice(0, 28))}</text>`;
+      if (names) sp = `<text x="${x + 8}" y="${y + 41}" font-size="9.5" fill="#c94a24">⚭ ${esc(names.slice(0, 28))}</text>`;
     }
-    parts.push(`<g data-id="${esc(n.id)}"><rect x="${X(n.gen)}" y="${Y(n.y)}" width="${w}" height="${h}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>` +
-      `<text x="${X(n.gen) + 6}" y="${Y(n.y) + 14}" font-size="11" font-weight="600" fill="#111">${esc(displayName(p).slice(0, PICTO[p.sex] ? 22 : 25))}</text>` +
-      `<text x="${X(n.gen) + 6}" y="${Y(n.y) + 27}" font-size="9.5" fill="#444">${esc(years(p))}</text>${sp}` +
-      (PICTO[p.sex] ? `<path class="pic ${p.sex}" transform="translate(${X(n.gen) + w - 17} ${Y(n.y) + 4}) scale(.55)" fill="${p.sex === 'F' ? '#b5603a' : '#3f5a46'}" d="${PICTO[p.sex]}"/>` : '') + '</g>');
+    parts.push(`<g data-id="${esc(n.id)}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>` +
+      `<text x="${x + 6}" y="${y + 14}" font-size="11" font-weight="600" fill="#111">${esc(displayName(p).slice(0, PICTO[p.sex] ? 22 : 25))}</text>` +
+      `<text x="${x + 6}" y="${y + 27}" font-size="9.5" fill="#444">${esc(years(p))}</text>${sp}` +
+      (PICTO[p.sex] ? `<path class="pic ${p.sex}" transform="translate(${x + w - 17} ${y + 4}) scale(.55)" fill="${p.sex === 'F' ? '#b5603a' : '#3f5a46'}" d="${PICTO[p.sex]}"/>` : '') + '</g>');
   }
   parts.push('</svg>');
   return parts.join('');
