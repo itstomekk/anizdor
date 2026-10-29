@@ -150,7 +150,7 @@ function emitExtraEvent(e, out) {
 }
 
 /** Serialize the model back to GEDCOM 5.5.1 UTF-8. Data the model does not edit (media, burial, custom tags) is kept verbatim. */
-export function serializeGedcom(model, { source = 'rodzina-tablica', standardMedia = false } = {}) {
+export function serializeGedcom(model, { source = 'anizdor', standardMedia = false } = {}) {
   const out = [];
   const head = (model.other || []).find((n) => n.tag === 'HEAD');
   if (head) {

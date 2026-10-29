@@ -1,0 +1,144 @@
+/* Theme "Swiss family / Dom": International Typographic Style (one grotesque, strict grid, flush left, hard rules, no shadows).
+   Palette taken from the family house photo (2026-10-28): apricot facade, dark roof, orange-red fence (accent),
+   conifer green for men, terracotta for women, overcast-sky grey for unknown.
+   Loaded after style.css and viz.css. Font is self-hosted (CSP font-src 'self'). Previous theme: design/2026-10-28-variants/1-album-applied.css */
+@import url('fonts.css');
+:root { color-scheme: light;
+  --bg: #fbf5ef; --card: #fffcf8; --bd: #ecdccd; --tx: #2a211e; --mut: #6f5f56; --ac: #c94a24; --ac2: #fbe4d6; --onac: #fff;
+  --ok: #4f7a3a; --warn: #b5650f; --err: #b8261a;
+  --m: #e2eadf; --f: #f8e0cf; --mS: #3f5a46; --fS: #b5603a; --u: #e8ecf0; --uS: #7d8d9e;
+  --shadow: none; --canvas: transparent; --line: #b8a597; --rule: #5a4a48;
+  --topbg: rgba(251,245,239,.94); --inbg: #fffcf8; --dropbg: #fffcf8;
+  --r: 2px; --head: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --c-m: #3f5a46; --c-f: #d98a5f; --c-dead: #7d8d9e; --c-live: #6e8a5a; --c-unk: #eed26a; }
+:root[data-theme=dark] { color-scheme: dark;
+  --bg: #171412; --card: #201c19; --bd: #3d352e; --tx: #f3ede5; --mut: #a99c8f; --ac: #ef7a4e; --ac2: #3a2219; --onac: #171412;
+  --ok: #95c27c; --warn: #e8a54b; --err: #ff8a7a;
+  --m: #23302a; --f: #3e2a20; --mS: #8fb59a; --fS: #e8a87c; --u: #262b31; --uS: #a9b8c8;
+  --canvas: transparent; --line: #6b5e51; --rule: #e8a87c;
+  --topbg: rgba(23,20,18,.94); --inbg: #1b1815; --dropbg: #1c1916;
+  --c-m: #8fb59a; --c-f: #e8a87c; --c-dead: #a9b8c8; --c-live: #8fcb7a; --c-unk: #eed26a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { color-scheme: dark;
+  --bg: #171412; --card: #201c19; --bd: #3d352e; --tx: #f3ede5; --mut: #a99c8f; --ac: #ef7a4e; --ac2: #3a2219; --onac: #171412;
+  --ok: #95c27c; --warn: #e8a54b; --err: #ff8a7a;
+  --m: #23302a; --f: #3e2a20; --mS: #8fb59a; --fS: #e8a87c; --u: #262b31; --uS: #a9b8c8;
+  --canvas: transparent; --line: #6b5e51; --rule: #e8a87c;
+  --topbg: rgba(23,20,18,.94); --inbg: #1b1815; --dropbg: #1c1916;
+  --c-m: #8fb59a; --c-f: #e8a87c; --c-dead: #a9b8c8; --c-live: #8fcb7a; --c-unk: #eed26a; } }
+
+/* Type: one family, contrast through weight and size only */
+body { font-family: var(--head); font-size: 15px; letter-spacing: -.006em; background: var(--bg); -webkit-font-smoothing: antialiased; }
+h2, h3, .brand span, .tile b, .ph h2, .empty h2 { font-family: var(--head); }
+h2 { font-size: 2rem; line-height: 1.05; font-weight: 750; letter-spacing: -.035em; }
+h3 { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; }
+.card h3 { padding-bottom: .5rem; margin-bottom: .75rem; border-bottom: 2px solid var(--rule); }
+
+/* Top bar: heavy rule, flush-left wordmark */
+.top { background: var(--topbg); border-bottom: 3px solid var(--rule); padding: .65rem 1.5rem; gap: .5rem 1.8rem; backdrop-filter: blur(8px); box-shadow: none; }
+.brand { font-size: 1.35rem; gap: .55rem; }
+.brand span { font-weight: 800; letter-spacing: -.045em; }
+.brand .logo { display: block; height: 40px; width: auto; }
+.brand .logo-dark { display: none; }
+:root[data-theme=dark] .brand .logo-light { display: none; }
+:root[data-theme=dark] .brand .logo-dark { display: block; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .brand .logo-light { display: none; } :root:not([data-theme=light]) .brand .logo-dark { display: block; } }
+#nav { gap: 0; }
+#nav a { border-radius: 0; padding: .45rem .8rem; font-size: .76rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--mut); }
+#nav a:hover { background: transparent; color: var(--tx); }
+#nav a.on { background: transparent; color: var(--tx); box-shadow: inset 0 -3px 0 var(--ac); font-weight: 700; }
+.badge { background: var(--ac); color: var(--onac); font-weight: 700; border-radius: 0; }
+
+/* Controls: square, flat */
+button, .btn { border-radius: var(--r); padding: .45rem .9rem; font-weight: 600; transition: border-color .15s, background .15s; }
+.primary { background: var(--ac); border-color: var(--ac); color: var(--onac) !important; }
+.primary:hover:not(:disabled) { filter: brightness(.94); }
+button:disabled { opacity: .35; cursor: not-allowed; }
+#undo, #redo { font-size: 1.05rem; }
+.side input, .side select, .grid input, .grid select, .grid textarea, .row input, .row select, select.big, .add select, .add input, .evrow input, .prow input, .treebar select, .cloud-form input { border-radius: var(--r); background: var(--inbg); border-color: var(--bd); }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--ac); outline-offset: 1px; }
+::placeholder { color: var(--mut); opacity: .85; }
+select { appearance: none; -webkit-appearance: none; padding-right: 1.8rem !important; background-image: linear-gradient(45deg, transparent 50%, var(--mut) 50%), linear-gradient(135deg, var(--mut) 50%, transparent 50%) !important; background-position: calc(100% - 14px) 52%, calc(100% - 9px) 52% !important; background-size: 5px 5px, 5px 5px !important; background-repeat: no-repeat !important; }
+.side select, .grid select, .row select, select.big, .add select, .treebar select { background-color: var(--inbg) !important; }
+
+/* Cards and tiles: hairline frame, no shadow, square; tiles are open with a heavy top rule */
+.card, .tile { border-radius: var(--r); box-shadow: none; border-color: var(--bd); }
+.card { line-height: 1.5; }
+.tile { border: 0; border-top: 3px solid var(--rule); background: transparent; padding-left: 0; }
+.tile b { font-size: 2.6rem; font-weight: 800; letter-spacing: -.05em; color: var(--tx); font-variant-numeric: tabular-nums; line-height: 1; }
+.tile:first-child b { color: var(--ac); }
+.card h2 + p, .empty p { color: var(--mut); }
+
+/* Person list: hairline rows, accent bar on the selected one */
+#list li { border-radius: 0; padding: .5rem .55rem; border-bottom: 1px solid var(--bd); }
+#list li:hover { background: var(--card); }
+#list li.on { background: var(--card); color: var(--tx); box-shadow: inset 4px 0 0 var(--ac); }
+#list li.on small { color: var(--mut); opacity: 1; }
+.side .sm, .side button { font-weight: 600; }
+
+/* Avatars: man / woman pictogram on a warm tint */
+.av, :root[data-theme=dark] .av { border-radius: var(--r); background: var(--u); color: var(--uS); font-weight: 700; box-shadow: none; }
+.av.M, :root[data-theme=dark] .av.M { background: var(--m); color: var(--mS); }
+.av.F, :root[data-theme=dark] .av.F { background: var(--f); color: var(--fS); }
+#list li.on .av { color: var(--uS); } #list li.on .av.M { color: var(--mS); } #list li.on .av.F { color: var(--fS); }
+.av .pic { width: 90%; height: 90%; fill: currentColor; display: block; }
+.ph .av.lg { width: 64px; height: 64px; font-size: 1.25rem; }
+.chip { background: var(--card); border: 1px solid var(--bd); border-radius: var(--r); }
+.pill { background: var(--ac2); color: var(--ac); border-radius: 0; font-weight: 600; }
+.tabs button.on { color: var(--tx); border-bottom: 3px solid var(--ac); }
+
+/* Tree board (layoutToSvg output) */
+#canvas, .canvas { background: var(--canvas); border-radius: var(--r); }
+.canvas svg > rect:first-child, #canvas svg > rect:first-child { fill: var(--canvas); }
+.canvas path, #canvas path { stroke: var(--line); }
+.canvas g[data-id] rect, #canvas g[data-id] rect { rx: 2; }
+.canvas rect[fill="#e2eadf"], #canvas rect[fill="#e2eadf"] { fill: var(--m); stroke: var(--mS); }
+.canvas rect[fill="#f8e0cf"], #canvas rect[fill="#f8e0cf"] { fill: var(--f); stroke: var(--fS); }
+.canvas rect[fill="#e8ecf0"], #canvas rect[fill="#e8ecf0"] { fill: var(--u); stroke: var(--uS); }
+.canvas path.pic, #canvas path.pic { stroke: none; }
+.canvas path.pic.M, #canvas path.pic.M { fill: var(--mS); } .canvas path.pic.F, #canvas path.pic.F { fill: var(--fS); }
+.canvas text[fill="#111"], #canvas text[fill="#111"] { fill: var(--tx); font-family: var(--head); font-weight: 700; letter-spacing: -.01em; }
+.canvas text[fill="#444"], #canvas text[fill="#444"] { fill: var(--mut); }
+.canvas text[fill="#c94a24"], #canvas text[fill="#c94a24"] { fill: var(--ac); }
+.vizbox:not(.space), :root[data-theme=dark] .vizbox:not(.space) { background: var(--canvas); border-radius: var(--r); }
+
+/* Misc */
+.empty .drop { border-radius: var(--r); border: 2px dashed var(--bd); background: var(--dropbg); }
+.issue { border-radius: var(--r); }
+.bar .fill, .hist rect { background: var(--ac); fill: var(--ac); }
+.bar .track { background: var(--ac2); border-radius: 0; } .bar .fill { border-radius: 0; }
+#msg { padding: .35rem 1.5rem; }
+main { padding: .5rem 1.5rem 2.5rem; }
+
+/* Empty states: flush left, large type */
+.empty { text-align: left; padding: 2.2rem 0 1.5rem; }
+.empty h2 { font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 800; letter-spacing: -.045em; margin: 0 0 .3rem; }
+.empty .drop { margin: 1.2rem 0; }
+
+/* Galaxy and fan: warm night instead of navy space */
+.vizbox.space { background: #1f1a16; border-color: #1f1a16; border-radius: var(--r); }
+.galaxy { --vbgc: #1f1a16; --vtx: #f3ede5; --vline: #6b5e51; }
+.galaxy .star { fill: #f3e2c8; opacity: .3; }
+.galaxy .edge { stroke: #8a7a68; } .galaxy .edge.spouse { stroke: #e2a74a; }
+.galaxy .node .core { fill: #b8a78f; stroke: #1f1a16; stroke-width: 1.2; } .galaxy .node.M .core { fill: #8fb59a; } .galaxy .node.F .core { fill: #e8a87c; }
+.galaxy .node .halo { fill: #b8a78f; } .galaxy .node.M .halo { fill: #8fb59a; } .galaxy .node.F .halo { fill: #e8a87c; }
+.galaxy .node .pic { fill: #1f1a16; pointer-events: none; }
+.galaxy .node.focus .core { stroke: #ef7a4e; stroke-width: 3; } .galaxy .node.focus .halo { fill: #ef7a4e; }
+.galaxy .nl { stroke: #1f1a16; font-family: var(--head); font-weight: 600; }
+.galaxy .edge.hl { stroke: #ef7a4e; } .vizbox .node:focus-visible .core { stroke: #ef7a4e; }
+.fan { --vm: #d5e2d4; --vf: #f6d6bf; --vu: #e3e8ee; --vempty: #c9bba8; --vline: #b9ab98; --vtx: #1d1916; --vhl: #c94a24; }
+:root[data-theme=dark] .fan { --vm: #2c3d33; --vf: #4a3022; --vu: #2d2823; --vempty: #5a4e43; --vtx: #f3ede5; --vbgc: #1c1916; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .fan { --vm: #2c3d33; --vf: #4a3022; --vu: #2d2823; --vempty: #5a4e43; --vtx: #f3ede5; --vbgc: #1c1916; } }
+.vizlegend .sw { border-radius: 0; } .vizlegend .sw.M { background: var(--c-m); } .vizlegend .sw.F { background: var(--c-f); } .vizlegend .sw.U { background: var(--uS); }
+.vizlegend .ln { border-top-color: var(--line); } .vizlegend .ln.spouse { border-top-color: #e2a74a; }
+.vizinfo { border-radius: var(--r); }
+
+/* Person header: Swiss display name */
+.ph h2 { font-size: clamp(1.9rem, 3.4vw, 2.8rem); font-weight: 800; letter-spacing: -.045em; line-height: 1; }
+.ph { padding-bottom: .9rem; border-bottom: 3px solid var(--rule); align-items: flex-end; }
+.ph .av.lg { width: 72px; height: 72px; }
+
+/* Full width; tree board without the card frame */
+main { max-width: none; }
+#canvas, .canvas { border: 0; border-top: 1px solid var(--bd); border-radius: 0; background: transparent; padding-top: .4rem; }
+.canvas svg > rect:first-child, #canvas svg > rect:first-child { fill: transparent; }
+.canvas text, #canvas text { font-family: var(--head); }

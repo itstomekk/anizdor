@@ -1,6 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "rodzina-tablica",
+  "name": "anizdor",
   "pages_build_output_dir": "./public",
-  "compatibility_date": "2026-10-01"
+  "compatibility_date": "2026-10-01",
+  // Encrypted family vault (functions/api). Holds only ciphertext and a hash of the auth secret.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "rodzina-tablica", "database_id": "4518deb3-e9c0-45b7-9c6b-c564efc4fa9f" }
+  ]
 }

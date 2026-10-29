@@ -235,6 +235,6 @@ export async function buildZip(model) {
     const ext = { 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[ph.mime] || 'jpg';
     files.push({ name: `photos/${ph.id}.${ext}`, data: new Uint8Array(await b.arrayBuffer()) }); n++;
   }
-  files.push({ name: 'README.txt', data: enc.encode('Kopia z aplikacji Rodzina.\r\nrodzina.ged = pełne dane (do wczytania z powrotem w aplikacji).\r\nrodzina-dla-innych-programow.ged = to samo ze zdjęciami jako zwykłe pliki w photos/ (Ahnenblatt, MyHeritage).\r\n') });
+  files.push({ name: 'README.txt', data: enc.encode('Kopia z aplikacji ANIZDOR.\r\nrodzina.ged = pełne dane (do wczytania z powrotem w aplikacji).\r\nrodzina-dla-innych-programow.ged = to samo ze zdjęciami jako zwykłe pliki w photos/ (Ahnenblatt, MyHeritage).\r\n') });
   return { blob: makeZip(files), photos: n, missing };
 }

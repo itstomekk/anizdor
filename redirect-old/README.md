@@ -1,0 +1,1 @@
+Redirect stub deployed to the old Cloudflare Pages project `rodzina-tablica` (https://rodzina-tablica.pages.dev/ -> https://anizdor.pages.dev/). Deploy: `npx wrangler pages deploy redirect-old --project-name rodzina-tablica --branch main`. Not part of the app.

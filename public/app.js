@@ -11,6 +11,7 @@ import { ensureExt } from './extras.js';
 import { eventsSection, sourcesSection, timelineTab, photosTab, viewTimeline, viewPlaces, viewSources, toolCards, buildZip } from './views_extra.js';
 import { putPhoto, readZip, allPhotoIds, deletePhoto, clearPhotos } from './media.js';
 import { viewBoard as viewViz } from './views_viz.js';
+import { createCloud } from './cloud.js';
 
 const KEY = 'rodzina.ged.v1';
 let model = emptyModel();
@@ -40,14 +41,29 @@ addEventListener('beforeunload', () => saveTimer && saveNow());
 document.addEventListener('visibilitychange', () => document.hidden && saveTimer && saveNow());
 
 const snapshot = () => serializeGedcom(model);
-function restore(text) { model = adopt(text ? parseGedcom(text) : emptyModel()); version++; scheduleSave(); }
+function restore(text) { model = adopt(text ? parseGedcom(text) : emptyModel()); version++; scheduleSave(); cloud.changed(); }
 function updateUndoButtons() { $('undo').disabled = !undoStack.length; $('redo').disabled = !redoStack.length; $('export').disabled = !count(); }
 
 /** Run a change to the model: snapshot for undo, save, re-render. */
 function mutate(fn, { keepView = true } = {}) {
   undoStack.push(count() ? snapshot() : ''); if (undoStack.length > 40) undoStack.shift(); redoStack.length = 0;
-  fn(); ensureExt(model); version++; scheduleSave(); refreshBadge(); updateUndoButtons(); render();
+  fn(); ensureExt(model); version++; scheduleSave(); cloud.changed(); refreshBadge(); updateUndoButtons(); render();
 }
+
+/** A newer tree arrived from the cloud: replace the model without marking it as a local edit. Ctrl+Z brings the old one back. */
+function applyRemote(text) {
+  if (count()) { undoStack.push(snapshot()); if (undoStack.length > 40) undoStack.shift(); redoStack.length = 0; }
+  model = adopt(parseGedcom(text)); version++; saveNow(); refreshBadge(); updateUndoButtons();
+  if (!location.hash && count()) location.hash = '#/osoby'; else render();
+}
+const cloud = createCloud({
+  text: () => serializeGedcom(model), count: () => count(), apply: applyRemote,
+  restore: (text) => mutate(() => { model = adopt(parseGedcom(text)); }),
+  photos: () => new Map(Object.values(model.persons).flatMap((p) => (p.photos || []).map((x) => [x.id, x.mime]))),
+  say: (t) => say(t), onPhotos: () => { if (!document.activeElement?.closest?.('#main')) render(); },
+  download: () => download('rodzina.ged', serializeGedcom(model), 'text/plain;charset=utf-8'),
+  button: $('cloud'),
+});
 function undo() { if (!undoStack.length) return; redoStack.push(count() ? snapshot() : ''); restore(undoStack.pop()); refreshBadge(); updateUndoButtons(); render(); say('Cofnięto.'); }
 function redo() { if (!redoStack.length) return; undoStack.push(count() ? snapshot() : ''); restore(redoStack.pop()); refreshBadge(); updateUndoButtons(); render(); say('Ponowiono.'); }
 
@@ -82,7 +98,8 @@ function render() {
 function emptyState() {
   const box = el('div', { class: 'empty' },
     el('h2', {}, 'Twoje drzewo rodzinne'),
-    el('p', { class: 'mut' }, 'Wczytaj plik GEDCOM (.ged) z Ahnenblatt, MyHeritage, Gramps lub innego programu. Dane zostają w tej przeglądarce i nie są wysyłane na żaden serwer.'),
+    el('div', { class: 'card cloud-empty' }, el('h3', {}, 'Rodzina w chmurze'), cloud.mount()),
+    el('p', { class: 'mut' }, 'Albo wczytaj plik GEDCOM (.ged) z Ahnenblatt, MyHeritage, Gramps lub innego programu. Bez chmury dane zostają tylko w tej przeglądarce.'),
     el('div', { class: 'drop' }, el('p', {}, 'Przeciągnij tu plik .ged'), el('label', { class: 'btn primary' }, 'Wybierz plik', el('input', { type: 'file', accept: '.ged,.gedcom,text/plain', hidden: true, onchange: (e) => e.target.files[0] && importFile(e.target.files[0]) }))),
     el('p', {}, el('button', { onclick: loadDemo }, 'Wypróbuj na zmyślonej rodzinie')));
   return box;
@@ -305,15 +322,15 @@ function viewStats(main) {
   const tile = (b, span) => el('div', { class: 'tile' }, el('b', {}, b), el('span', {}, span));
   const searchFor = (name) => { ui.q = name; ui.filter = 'all'; go('osoby'); };
   const lifeParts = [
-    { name: 'zmarli', n: t.life.dead + t.life['probably-dead'], color: '#7d8da6' },
-    { name: 'żyjący', n: t.life.living, color: '#2f9e6b' },
-    { name: 'brak danych', n: t.life['unknown-living'], color: '#d9a441' }];
+    { name: 'zmarli', n: t.life.dead + t.life['probably-dead'], color: 'var(--c-dead, #7d8da6)' },
+    { name: 'żyjący', n: t.life.living, color: 'var(--c-live, #2f9e6b)' },
+    { name: 'brak danych', n: t.life['unknown-living'], color: 'var(--c-unk, #d9a441)' }];
   main.replaceChildren(el('div', { style: 'margin-top:.5rem' },
     el('div', { class: 'tiles' },
       tile(t.persons, 'osób'), tile(t.families, 'rodzin'), tile(s.generations.max, 'pokoleń (najdłuższa linia)'), tile(s.surnameCount, 'różnych nazwisk'),
       tile(s.span ? `${s.span.from}–${s.span.to}` : '–', 'zakres lat urodzin'), tile(nf(s.family.avgChildren), 'dzieci na rodzinę z dziećmi')),
     el('div', { class: 'cols' },
-      card('Płeć', stack([{ name: 'mężczyźni', n: t.sex.M, color: '#5b8bd6' }, { name: 'kobiety', n: t.sex.F, color: '#d9739b' }, { name: 'brak', n: t.sex.other, color: '#aaa' }])),
+      card('Płeć', stack([{ name: 'mężczyźni', n: t.sex.M, color: 'var(--c-m, #5b8bd6)' }, { name: 'kobiety', n: t.sex.F, color: 'var(--c-f, #d9739b)' }, { name: 'brak', n: t.sex.other, color: '#aaa' }])),
       card('Żyjący i zmarli', stack(lifeParts), el('p', { class: 'mut' }, '„Brak danych” to osoby bez daty urodzenia i bez zapisu śmierci; nie wiadomo, czy żyją.')),
       card('Kompletność danych', bars(s.completeness.map((c) => ({ name: c.key, n: c.pct })), { fmt: (n) => n + '%', max: 100 })),
       card('Urodzenia według dekad', hist(s.birthsByDecade)),
@@ -391,6 +408,7 @@ function viewTools(main) {
   main.replaceChildren(el('div', { class: 'cols', style: 'margin-top:.5rem' },
     card('Kalkulator pokrewieństwa', el('p', { class: 'mut' }, 'Wybierz dwie osoby. Szukam najbliższego wspólnego przodka.'), el('div', { class: 'row' }, el('label', { class: 'mut' }, 'Osoba 1', A), el('label', { class: 'mut' }, 'Osoba 2', B)), res),
     card(`Najbliższe urodziny (60 dni)`, upcomingBox(60, false)),
+    card('Chmura (szyfrowana)', cloud.mount()),
     ...toolCards(ctx, card),
     card('Eksport', el('p', { class: 'mut' }, 'Pełny plik GEDCOM zachowuje wszystko z oryginału (zdjęcia, pochówki, znaczniki programów).'),
       el('div', { class: 'row' },
@@ -398,8 +416,8 @@ function viewTools(main) {
         el('button', { onclick: () => { const { model: m, anonymized } = anonymizeLiving(model); download('rodzina-bez-zyjacych.ged', serializeGedcom(m), 'text/plain;charset=utf-8'); say(`Zanonimizowano ${anonymized} osób (żyjące lub bez danych). Plik nadaje się do udostępnienia.`); } }, 'Pobierz .ged bez danych żyjących'),
         el('button', { onclick: () => download('rodzina.csv', toCsv(model), 'text/csv;charset=utf-8') }, 'Pobierz CSV (Excel)')),
       el('p', { class: 'mut' }, `Wersja bez żyjących zastąpi dane ${living} osób (żyjących lub bez dat) napisem „Żyjąca osoba” i usunie ich daty, miejsca i notatki.`)),
-    card('Dane i prywatność', el('p', {}, `W tej przeglądarce: ${count()} osób. Dane nie opuszczają urządzenia. Aby mieć je na innym urządzeniu, pobierz .ged i wczytaj tam.`),
-      el('div', { class: 'row' }, el('button', { class: 'danger', onclick: () => { if (confirm('Usunąć drzewo z tej przeglądarki? Najpierw pobierz .ged. Można to cofnąć tylko do zamknięcia karty (Ctrl+Z).')) { mutate(() => { model = adopt(emptyModel()); }); clearPhotos(); go('osoby'); say('Dane i zdjęcia usunięte z przeglądarki.'); } } }, 'Usuń dane z przeglądarki'))),
+    card('Dane i prywatność', el('p', {}, `W tej przeglądarce: ${count()} osób. Do chmury trafia tylko zaszyfrowana kopia; serwer nie zna hasła ani treści.`),
+      el('div', { class: 'row' }, el('button', { class: 'danger', onclick: async () => { if (confirm('Usunąć drzewo i zdjęcia z tej przeglądarki i zapomnieć tu hasło do chmury? Kopia w chmurze zostaje.')) { await cloud.forgetDevice(); mutate(() => { model = adopt(emptyModel()); }); await cloud.forgetDevice(); clearPhotos(); go('osoby'); say('Dane i zdjęcia usunięte z przeglądarki. Kopia w chmurze zostaje.'); } } }, 'Usuń dane z przeglądarki'))),
     card('Skróty', el('ul', { class: 'plain' }, [['/', 'szukaj osoby'], ['Ctrl+Z / Ctrl+Y', 'cofnij / ponów'], ['G potem O, T, C, M, Z, S, K, N', 'przejdź do widoku (osoby, tablica, oś czasu, miejsca, źródła, statystyki, kontrola, narzędzia)']].map(([k, t]) => el('li', {}, el('span', { class: 'kbd' }, k), el('span', { class: 'mut' }, t)))))));
 }
 
@@ -458,4 +476,5 @@ try {
 if (count()) refreshBadge();
 if (!location.hash && count()) location.hash = '#/osoby';
 render();
+cloud.start();
 window.__app = { get model() { return model; }, get version() { return version; } };

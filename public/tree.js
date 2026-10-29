@@ -194,34 +194,41 @@ export function layoutForest(model, maxGen = 30) {
   return { nodes, links, rows: Math.max(row, 1), trees, alone };
 }
 
+/** Man / woman pictograms (24x24, Aicher-style): head + body. Used by avatars and the tree board. */
+export const PICTO = {
+  M: 'M12 1.6a2.7 2.7 0 1 1 0 5.4a2.7 2.7 0 1 1 0-5.4ZM8.8 8h6.4a1.4 1.4 0 0 1 1.4 1.4v6.1h-2v7h-2.1v-6.5h-1v6.5H9.4v-7h-2V9.4A1.4 1.4 0 0 1 8.8 8Z',
+  F: 'M12 1.6a2.7 2.7 0 1 1 0 5.4a2.7 2.7 0 1 1 0-5.4ZM9.9 8h4.2a1 1 0 0 1 .95.68L18.6 18h-4.2v4.5h-1.6V18h-1.6v4.5H9.6V18H5.4l3.55-9.32A1 1 0 0 1 9.9 8Z',
+};
+
 /** Render a layout to an SVG string (labels escaped). opts.spouse adds a "⚭ partner" line; opts.mark highlights ids. */
-export function layoutToSvg(model, lay, { w = 180, gx = 40, gy = 14, spouse = false, mark = null } = {}) {
-  const h = spouse ? 58 : 44;
+export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = false, mark = null } = {}) {
+  const h = spouse ? 46 : 34;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const maxGen = Math.max(0, ...lay.nodes.map((n) => n.gen));
-  const X = (g) => 10 + g * (w + gx);
-  const Y = (r) => 10 + r * (h + gy);
+  const X = (g) => 4 + g * (w + gx);
+  const Y = (r) => 4 + r * (h + gy);
   const maxRow = Math.max(0, ...lay.nodes.map((n) => n.y));
-  const width = X(maxGen) + w + 10, height = Y(maxRow) + h + 10;
+  const width = X(maxGen) + w + 4, height = Y(maxRow) + h + 4;
   const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui,Arial,sans-serif"><rect width="100%" height="100%" fill="#fff"/>`];
   for (const [a, b] of lay.links) {
     const A = lay.nodes[a], B = lay.nodes[b];
     const x1 = X(A.gen) + w, y1 = Y(A.y) + h / 2, x2 = X(B.gen), y2 = Y(B.y) + h / 2, mx = (x1 + x2) / 2;
-    parts.push(`<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#7b8794" stroke-width="1.3"/>`);
+    parts.push(`<path d="M${x1} ${y1} H${mx} V${y2} H${x2}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
   }
   for (const n of lay.nodes) {
     const p = model.persons[n.id];
-    const fill = p.sex === 'F' ? '#fde4ec' : p.sex === 'M' ? '#dfeafc' : '#eee';
-    const stroke = mark && mark.has(n.id) ? '#e08a00' : p.sex === 'F' ? '#d37a9a' : p.sex === 'M' ? '#6f95d6' : '#999';
+    const fill = p.sex === 'F' ? '#f8e0cf' : p.sex === 'M' ? '#e2eadf' : '#e8ecf0';
+    const stroke = mark && mark.has(n.id) ? '#c94a24' : p.sex === 'F' ? '#b5603a' : p.sex === 'M' ? '#3f5a46' : '#7d8d9e';
     const sw = mark && mark.has(n.id) ? 3 : 1;
     let sp = '';
     if (spouse) {
       const names = spousesOf(model, n.id).filter((s) => s.spouse).map((s) => displayName(model.persons[s.spouse])).join(', ');
-      if (names) sp = `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 51}" font-size="11" fill="#7a4a63">⚭ ${esc(names.slice(0, 30))}</text>`;
+      if (names) sp = `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 41}" font-size="9.5" fill="#c94a24">⚭ ${esc(names.slice(0, 28))}</text>`;
     }
     parts.push(`<g data-id="${esc(n.id)}"><rect x="${X(n.gen)}" y="${Y(n.y)}" width="${w}" height="${h}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>` +
-      `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 19}" font-size="13" font-weight="600" fill="#111">${esc(displayName(p).slice(0, 26))}</text>` +
-      `<text x="${X(n.gen) + 8}" y="${Y(n.y) + 35}" font-size="11.5" fill="#444">${esc(years(p))}</text>${sp}</g>`);
+      `<text x="${X(n.gen) + 6}" y="${Y(n.y) + 14}" font-size="11" font-weight="600" fill="#111">${esc(displayName(p).slice(0, PICTO[p.sex] ? 22 : 25))}</text>` +
+      `<text x="${X(n.gen) + 6}" y="${Y(n.y) + 27}" font-size="9.5" fill="#444">${esc(years(p))}</text>${sp}` +
+      (PICTO[p.sex] ? `<path class="pic ${p.sex}" transform="translate(${X(n.gen) + w - 17} ${Y(n.y) + 4}) scale(.55)" fill="${p.sex === 'F' ? '#b5603a' : '#3f5a46'}" d="${PICTO[p.sex]}"/>` : '') + '</g>');
   }
   parts.push('</svg>');
   return parts.join('');

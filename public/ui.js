@@ -1,5 +1,5 @@
 // Small DOM helpers. Everything is built with createElement/textContent: stored names are never parsed as HTML.
-import { displayName, years } from './tree.js';
+import { displayName, years, PICTO } from './tree.js';
 import { photoUrl } from './media.js';
 
 export const $ = (id) => document.getElementById(id);
@@ -31,7 +31,8 @@ export function initials(p) {
 }
 
 export function avatar(p, big = false) {
-  const span = el('span', { class: `av ${p.sex || ''}${big ? ' lg' : ''}` }, initials(p));
+  const span = el('span', { class: `av ${p.sex || ''}${big ? ' lg' : ''}`, title: initials(p) },
+    PICTO[p.sex] ? svg('svg', { viewBox: '0 0 24 24', class: 'pic', 'aria-hidden': 'true' }, svg('path', { d: PICTO[p.sex] })) : initials(p));
   const ph = p.photos?.find((x) => x.primary) || p.photos?.[0];
   if (ph) photoUrl(ph.id).then((u) => {
     if (!u) return;

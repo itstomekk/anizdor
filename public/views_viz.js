@@ -1,7 +1,7 @@
 // Interactive views of the family: galaxy (network of people) and ancestor fan. DOM + pointer handling only;
 // all geometry comes from visualizations.js. Everything is built with createElementNS/textContent (names are never parsed as HTML).
 import { el, svg, personLabel } from './ui.js';
-import { displayName, years } from './tree.js';
+import { displayName, years, PICTO } from './tree.js';
 import { relate } from './kin.js';
 import { photoUrl } from './media.js';
 import { fanLayout, arcPath, ringRadii, galaxyGraph, layoutGalaxy, bbox, clampView, dataLevel } from './visualizations.js';
@@ -254,7 +254,8 @@ function galaxyView(main, ctx, focus, { head, download }) {
     const p = m.persons[n.id];
     const r = n.d === 0 && i === 0 ? 11 : Math.min(10, 4.4 + Math.sqrt(n.deg) * 1.5);
     const g = svg('g', { class: `node ${p.sex || ''}${i === 0 ? ' focus' : ''}${n.d <= 1 ? ' near' : ''}`, 'data-id': n.id, 'data-i': i, transform: `translate(${n.x} ${n.y})`, tabindex: 0, role: 'button', 'aria-label': `${displayName(p)} ${fmtYears(p)}` });
-    g.append(svg('circle', { class: 'halo', r: r * 2.6 }), svg('circle', { class: 'core', r }), svg('text', { class: 'nl', y: r + 11, 'text-anchor': 'middle' }, displayName(p).slice(0, 24)), svg('title', {}, `${displayName(p)} ${fmtYears(p)}`));
+    const pic = PICTO[p.sex] ? svg('path', { class: 'pic', d: PICTO[p.sex], transform: `translate(${(-r * 0.62).toFixed(2)} ${(-r * 0.62).toFixed(2)}) scale(${(r * 1.24 / 24).toFixed(3)})` }) : null;
+    g.append(svg('circle', { class: 'halo', r: r * 2.6 }), svg('circle', { class: 'core', r }), pic, svg('text', { class: 'nl', y: r + 11, 'text-anchor': 'middle' }, displayName(p).slice(0, 24)), svg('title', {}, `${displayName(p)} ${fmtYears(p)}`));
     nodesG.append(g); return g;
   });
   root.append(lines, nodesG);
