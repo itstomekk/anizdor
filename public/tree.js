@@ -262,11 +262,13 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
   if (title) width = Math.max(width, Math.min(900, 14 * title.length) + 8);
   const parts = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui,Arial,sans-serif"><rect width="100%" height="100%" fill="#fff"/>`];
   if (title) parts.push(`<text x="${left}" y="26" font-size="22" font-weight="700" fill="#111">${esc(title)}</text>`);
+  const axisLabels = [];
   if (time) {
     for (let yr = y0; yr <= y1; yr += 10) {
       const y = (yr - y0) * ppy - minY + top;
       if (y > height) break;
-      parts.push(`<line class="axis" x1="${left - 6}" y1="${y}" x2="${width}" y2="${y}" stroke="#e7ded6" stroke-width="${yr % 50 ? 0.6 : 1.2}"/><text x="4" y="${y + 4}" font-size="10" fill="#8a7b70">${yr}</text>`);
+      parts.push(`<line class="axis" x1="${left - 6}" y1="${y}" x2="${width}" y2="${y}" stroke="#e7ded6" stroke-width="${yr % 50 ? 0.6 : 1.2}"/>`);
+      axisLabels.push(`<rect x="1" y="${y - 7}" width="30" height="13" rx="3" fill="#fff" fill-opacity=".85"/><text x="4" y="${y + 4}" font-size="10" fill="#8a7b70">${yr}</text>`);
     }
   }
   for (const [a, b] of lay.links) {
@@ -297,6 +299,8 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
       `<text x="${x + 6}" y="${y + 27}" font-size="9.5" fill="#444">${esc(years(p))}</text>${sp}` +
       (PICTO[p.sex] ? `<path class="pic ${p.sex}" transform="translate(${x + w - 17} ${y + 4}) scale(.55)" fill="${p.sex === 'F' ? '#b5603a' : '#3f5a46'}" d="${PICTO[p.sex]}"/>` : '') + '</g>');
   });
+  // year labels on top of everything; the app keeps this group pinned to the left edge while scrolling
+  if (axisLabels.length) parts.push(`<g class="yearlabels">${axisLabels.join('')}</g>`);
   parts.push('</svg>');
   return parts.join('');
 }

@@ -13,9 +13,9 @@ No account. No install. No ads. Your family stays yours.
 
 <br>
 
-<a href="https://anizdor.pages.dev/"><img src=".github/readme/galaxy.png" alt="ANIZDOR galaxy view: one person in the middle, relatives around them as stars" width="860"></a>
+<a href="https://anizdor.pages.dev/"><img src=".github/readme/tree.png" alt="ANIZDOR vertical family tree on a birth-year axis, a real 334-person family with every name, date and place replaced" width="860"></a>
 
-<sub>Screenshots use a made-up demo family. The app interface is in Polish.</sub>
+<sub>Above: a real family of 334 people, anonymized (every name, date and place replaced, only the shape of the tree is real). Other screenshots use a made-up demo family. The app interface is in Polish.</sub>
 
 </div>
 
@@ -46,6 +46,10 @@ The name is **RODZINA** (Polish for "family") read backwards. The app interface 
   <tr>
     <td width="50%"><img src=".github/readme/life-lines.png" alt="Life lines chart with bars from birth to death"><br><sub><b>Life lines</b>: see who overlapped in time</sub></td>
     <td width="50%"><img src=".github/readme/statistics.png" alt="Statistics page with charts"><br><sub><b>Statistics</b>: your family in numbers</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/readme/galaxy.png" alt="Galaxy view: one person in the middle, relatives around them as stars"><br><sub><b>Galaxy</b>: one person in the centre, relatives around them</sub></td>
+    <td width="50%"><img src=".github/readme/tree-popup.png" alt="Person popup opened over the family tree"><br><sub><b>Click anyone</b>: parents, partners and children at a glance</sub></td>
   </tr>
 </table>
 

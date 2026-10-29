@@ -293,7 +293,14 @@ function viewClassic(main, head) {
     const vb = svgNode.viewBox.baseVal;
     svgNode.setAttribute('width', Math.round(vb.width * ui.zoom)); svgNode.setAttribute('height', Math.round(vb.height * ui.zoom));
     zl.textContent = Math.round(ui.zoom * 100) + '%';
+    pinYears();
   };
+  // keep the birth-year labels visible when a wide tree is scrolled sideways
+  const pinYears = () => {
+    const g = svgNode?.querySelector('g.yearlabels');
+    if (g) g.setAttribute('transform', `translate(${canvas.scrollLeft / ui.zoom} 0)`);
+  };
+  canvas.addEventListener('scroll', pinYears, { passive: true });
   const draw = () => {
     svgText = layoutToSvg(model, lay, { spouse: true, mark, vertical: ui.vertical, timeAxis: ui.timeAxis });
     svgNode = mountSvg(canvas, svgText, (gid, g) => showPersonPop(ctx, gid, g.querySelector('rect') || g, { onRelative: popAt }));
