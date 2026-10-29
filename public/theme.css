@@ -142,3 +142,50 @@ main { max-width: none; }
 #canvas, .canvas { border: 0; border-top: 1px solid var(--bd); border-radius: 0; background: transparent; padding-top: .4rem; }
 .canvas svg > rect:first-child, #canvas svg > rect:first-child { fill: transparent; }
 .canvas text, #canvas text { font-family: var(--head); }
+
+
+/* Compact layout (2026-10-29): denser header, nav wraps instead of scrolling, smaller controls */
+.top { padding: .35rem 1rem; gap: .25rem 1.1rem; border-bottom-width: 2px; }
+.brand .logo { height: 32px; }
+#nav { flex-wrap: wrap; overflow: visible; row-gap: 0; }
+#nav a { padding: .35rem .6rem; font-size: .72rem; letter-spacing: .06em; }
+.actions { gap: .25rem; }
+.actions button, .actions .btn { padding: .22rem .55rem; font-size: .82rem; line-height: 1.3; }
+#undo, #redo, #theme, #cloud { min-width: 2rem; padding-left: .35rem; padding-right: .35rem; }
+#msg { padding: .15rem 1rem; min-height: 1.2rem; font-size: .82rem; }
+main { padding: 0 .75rem 1.5rem; }
+.card { padding: .75rem; }
+.split, .cols { gap: .65rem; }
+.side { top: 3.4rem; height: calc(100vh - 4.2rem); padding: .55rem; }
+#list li { padding: .26rem .4rem; gap: .45rem; }
+.av { width: 24px; height: 24px; font-size: .64rem; }
+.av.lg, .ph .av.lg { width: 52px; height: 52px; font-size: 1rem; }
+.card h3 { padding-bottom: .35rem; margin-bottom: .5rem; }
+ul.plain li { padding: .18rem 0; }
+.subtabs { margin: .35rem 0 .6rem; gap: 1rem; }
+.subtabs .badge { margin-left: .3rem; }
+
+/* Next birthdays strip above the persons view */
+.bdays { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .8rem; padding: .3rem .1rem .45rem; font-size: .85rem; }
+.bdays b { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
+.bdays ul { display: flex; flex-wrap: wrap; gap: .2rem 1rem; list-style: none; margin: 0; padding: 0; }
+.bdays li { white-space: nowrap; }
+.bdays a { cursor: pointer; font-weight: 600; }
+
+@media (max-width: 860px) {
+  .top { padding: .35rem .6rem; gap: .2rem .5rem; }
+  .brand { order: 1; } .actions { order: 2; width: auto; margin-left: auto; flex-wrap: nowrap; }
+  #nav { order: 3; flex: 1 1 100%; justify-content: space-between; }
+  #nav a { padding: .35rem .3rem; font-size: .68rem; letter-spacing: .03em; }
+  .brand .logo { height: 28px; }
+  .actions button, .actions .btn { min-height: 34px; padding: .2rem .45rem; font-size: .78rem; }
+  .actions .primary { flex: none; white-space: nowrap; }
+  button, .btn { min-height: 34px; padding: .3rem .65rem; }
+  .side { max-height: 40vh; }
+  .bdays li { white-space: normal; }
+}
+@media (max-width: 520px) {
+  .actions #export, .actions .long { display: none; }
+  #nav { display: grid; grid-template-columns: repeat(3, 1fr); }
+  #nav a { text-align: center; }
+}

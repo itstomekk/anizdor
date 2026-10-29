@@ -85,12 +85,21 @@ const goPerson = (id, tab = 'info') => go(`osoby/${strip(id)}/${tab}`);
 
 function render() {
   const r = route();
-  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.view === r.view));
+  const TOOL_TABS = [['narzedzia', 'Narzędzia'], ['zrodla', 'Źródła'], ['kontrola', 'Kontrola']];
+  const navView = TOOL_TABS.some(([v]) => v === r.view) ? 'narzedzia' : r.view;
+  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.view === navView));
   updateUndoButtons();
   const main = $('main');
   if (!count()) { main.replaceChildren(emptyState()); return; }
   ensureExt(model);
   const views = { osoby: viewPersons, tablica: (mn, rt) => viewViz(mn, rt, ctx, { classic: viewClassic, download }), 'os-czasu': (mn) => viewTimeline(mn, ctx), miejsca: (mn) => viewPlaces(mn, ctx), zrodla: (mn) => viewSources(mn, ctx), statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools };
+  if (navView === 'narzedzia') {
+    const n = issues().filter((i) => i.sev !== 'info' && !ignored.has(issueKey(i))).length;
+    const inner = el('div');
+    main.replaceChildren(el('div', { class: 'tabs subtabs' }, TOOL_TABS.map(([v, label]) => el('button', { class: v === r.view ? 'on' : '', onclick: () => go(v) }, label, v === 'kontrola' && n ? el('span', { class: 'badge' }, n) : null))), inner);
+    views[r.view](inner, r);
+    return;
+  }
   (views[r.view] || viewPersons)(main, r);
 }
 
@@ -164,8 +173,8 @@ function viewPersons(main, r) {
   const side = el('aside', { class: 'card side' }, q, el('div', { class: 'filters' }, fsel, ssel), info, list,
     el('button', { class: 'sm', style: '', onclick: () => { let id; mutate(() => { id = addPerson(model, { given: 'Nowa', surname: 'Osoba' }); }); goPerson(id); } }, '+ Nowa osoba'));
   const panel = el('section', { class: 'card', id: 'panel' });
-  main.replaceChildren(el('div', { class: 'split', style: '' }, side, panel));
-  if (sel) personPanel(panel, sel, r.b || 'info'); else panel.append(el('div', { class: 'empty' }, el('h2', {}, 'Wybierz osobę z listy'), el('p', { class: 'mut' }, `${count()} osób w drzewie.`)), upcomingBox(30));
+  main.replaceChildren(birthdayStrip() || '', el('div', { class: 'split', style: '' }, side, panel));
+  if (sel) personPanel(panel, sel, r.b || 'info'); else panel.append(el('div', { class: 'empty' }, el('h2', {}, 'Wybierz osobę z listy'), el('p', { class: 'mut' }, `${count()} osób w drzewie.`)), upcomingBox(8));
   fill();
 }
 
@@ -392,10 +401,18 @@ Zostaje pierwsza, jej brakujące dane zostaną uzupełnione. Można cofnąć (Ct
 }
 
 // ---------- tools ----------
-function upcomingBox(days = 60, title = true) {
-  const up = upcomingBirthdays(model, new Date(), days);
-  return el('div', {}, title && el('h3', {}, `Najbliższe urodziny (${days} dni)`), up.length ? el('ul', { class: 'plain' }, up.slice(0, 15).map((u) =>
-    el('li', {}, el('a', { onclick: () => goPerson(u.id) }, displayName(model.persons[u.id])), el('span', { class: 'mut' }, `${u.in === 0 ? 'dziś' : u.in === 1 ? 'jutro' : 'za ' + u.in + ' dni'} · ${u.day}.${String(u.month).padStart(2, '0')} · kończy ${u.turns}`)))) : el('p', { class: 'mut' }, 'Brak urodzin z pełną datą w tym okresie.'));
+const whenTxt = (u) => (u.in === 0 ? 'dziś' : u.in === 1 ? 'jutro' : 'za ' + u.in + ' dni');
+function upcomingBox(n = 8, title = true) {
+  const up = upcomingBirthdays(model, new Date(), 366).slice(0, n);
+  return el('div', {}, title && el('h3', {}, 'Najbliższe urodziny'), up.length ? el('ul', { class: 'plain' }, up.map((u) =>
+    el('li', {}, el('a', { onclick: () => goPerson(u.id) }, displayName(model.persons[u.id])), el('span', { class: 'mut' }, `${whenTxt(u)} · ${u.day}.${String(u.month).padStart(2, '0')} · kończy ${u.turns}`)))) : el('p', { class: 'mut' }, 'Brak żyjących osób z pełną datą urodzenia.'));
+}
+/** Slim strip with the next few birthdays, shown above the persons view. */
+function birthdayStrip(n = 5) {
+  const up = upcomingBirthdays(model, new Date(), 366).slice(0, n);
+  if (!up.length) return null;
+  return el('div', { class: 'bdays', 'aria-label': 'Najbliższe urodziny' }, el('b', {}, '🎂 Urodziny'),
+    el('ul', {}, up.map((u) => el('li', {}, el('a', { onclick: () => goPerson(u.id) }, displayName(model.persons[u.id])), el('span', { class: 'mut' }, ` ${whenTxt(u)} · ${u.day}.${String(u.month).padStart(2, '0')} · ${u.turns}`)))));
 }
 
 function viewTools(main) {
@@ -407,7 +424,7 @@ function viewTools(main) {
   const living = Object.values(model.persons).filter((p) => isLiving(p)).length;
   main.replaceChildren(el('div', { class: 'cols', style: 'margin-top:.5rem' },
     card('Kalkulator pokrewieństwa', el('p', { class: 'mut' }, 'Wybierz dwie osoby. Szukam najbliższego wspólnego przodka.'), el('div', { class: 'row' }, el('label', { class: 'mut' }, 'Osoba 1', A), el('label', { class: 'mut' }, 'Osoba 2', B)), res),
-    card(`Najbliższe urodziny (60 dni)`, upcomingBox(60, false)),
+    card('Najbliższe urodziny', upcomingBox(12, false)),
     card('Chmura (szyfrowana)', cloud.mount()),
     ...toolCards(ctx, card),
     card('Eksport', el('p', { class: 'mut' }, 'Pełny plik GEDCOM zachowuje wszystko z oryginału (zdjęcia, pochówki, znaczniki programów).'),
