@@ -71,17 +71,18 @@ const toBlob = (c, type, q) => new Promise((r) => c.toBlob(r, type, q));
 
 /**
  * Open the export editor as a full-screen overlay.
- * opts: { model, lay, vertical, timeAxis, title, download(name, data, type), say(msg) }
+ * opts: { model, lay, vertical, timeAxis, lifetime, isDead, title, download(name, data, type), say(msg) }
  */
-export function openTreeExport({ model, lay, vertical, timeAxis, title = '', download, say = () => {} }) {
-  const key = `anizdor.exportOffsets.${vertical ? (timeAxis ? 't' : 'v') : 'h'}`;
+export function openTreeExport({ model, lay, vertical, timeAxis, lifetime = false, isDead = null, title = '', download, say = () => {} }) {
+  // v2: vertical trees are packed sideways now, older hand offsets would land in the wrong place
+  const key = `anizdor.exportOffsets.${vertical ? (timeAxis ? (lifetime ? 'l2' : 't2') : 'v2') : 'h'}`;
   let offsets = {};
   try { offsets = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch {}
   const known = new Set(lay.nodes.map((n) => n.id));
   for (const id of Object.keys(offsets)) if (!known.has(id)) delete offsets[id];
   const st = { title, withKids: true, paper: 'a3', scale: 2 };
   const save = () => { try { localStorage.setItem(key, JSON.stringify(offsets)); } catch {} };
-  const svgText = () => layoutToSvg(model, lay, { spouse: true, vertical, timeAxis, offsets, title: st.title.trim() });
+  const svgText = () => layoutToSvg(model, lay, { spouse: true, vertical, timeAxis, lifetime, isDead, offsets, title: st.title.trim() });
   const board = el('div', { class: 'xp-board' });
   let zoom = 1;
   const draw = () => {

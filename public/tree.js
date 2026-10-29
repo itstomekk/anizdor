@@ -224,12 +224,61 @@ export function nodeYears(model, lay, gap = 28) {
 }
 
 /**
+ * Compact columns for the vertical tree. iv[i] = [top, bottom] of node i in px. Subtrees are placed left to right
+ * (children keep their order) and each one slides as far left as it can without two boxes in one column
+ * overlapping in time, so a short branch can tuck under or over a long one. Returns a column index per node.
+ */
+export function packColumns(lay, iv, gap = 6) {
+  const n = lay.nodes.length, kids = Array.from({ length: n }, () => []), hasParent = new Array(n).fill(false);
+  for (const [a, b] of lay.links) { kids[a].push(b); hasParent[b] = true; }
+  const hit = (cols, c, i) => (cols.get(c) || []).some((j) => iv[j][0] < iv[i][1] + gap && iv[i][0] < iv[j][1] + gap);
+  const put = (cols, c, i) => { if (!cols.has(c)) cols.set(c, []); cols.get(c).push(i); };
+  const col = new Array(n).fill(0);
+  // place a list of subtrees side by side; returns { boxes: [[i, c]], roots: [c per subtree] }
+  // free = separate family branches: each one takes the first gap from the left, order does not matter
+  const row = (subs, free = false) => {
+    const cols = new Map(), boxes = [], roots = [];
+    let prev = null;
+    for (const S of subs) {
+      let s = prev == null || free ? 0 : prev + 1 - S.root;
+      while (S.boxes.some(([i, c]) => hit(cols, c + s, i))) s++;
+      for (const [i, c] of S.boxes) { put(cols, c + s, i); boxes.push([i, c + s]); }
+      prev = S.root + s; roots.push(prev);
+    }
+    return { cols, boxes, roots };
+  };
+  const walk = (i, path) => {
+    const subs = kids[i].filter((k) => !path.has(k)).map((k) => walk(k, new Set([...path, k])));
+    const { cols, boxes, roots } = row(subs);
+    let c = roots.length ? Math.round((roots[0] + roots[roots.length - 1]) / 2) : 0;
+    for (let d = 0; hit(cols, c, i); d++) { const t = c + (d % 2 ? -(d + 1) / 2 : d / 2 + 1); if (!hit(cols, t, i)) { c = t; break; } }
+    boxes.push([i, c]);
+    const min = Math.min(...boxes.map((b) => b[1]));
+    return { boxes: boxes.map(([j, k]) => [j, k - min]), root: c - min };
+  };
+  const top = row([...Array(n).keys()].filter((i) => !hasParent[i]).map((i) => walk(i, new Set([i]))), true);
+  const min = top.boxes.length ? Math.min(...top.boxes.map((b) => b[1])) : 0;
+  for (const [i, c] of top.boxes) col[i] = c - min;
+  return col;
+}
+
+/** Last year of a life for the lifetime bars: death year, this year for people who are probably alive, else null (unknown). */
+export function endYear(p, born, dead = !!(p?.death?.date || p?.death?.place), now = new Date().getFullYear()) {
+  const d = yearIn(p?.death?.date);
+  if (d != null) return d;
+  if (dead || born == null) return null;
+  return now - born <= 110 ? now : null;
+}
+
+/**
  * Render a layout to an SVG string (labels escaped).
  * opts.spouse adds a "⚭ partner" line; opts.mark highlights ids; opts.vertical draws generations top -> bottom;
- * opts.timeAxis (vertical only) places each person at the height of their birth year, with a decade scale;
+ * opts.timeAxis (vertical only) places each person exactly at the height of their birth year, with a decade scale;
+ * opts.lifetime (with timeAxis) stretches each box down to the year of death, so its height is the length of life;
+ * vertical trees are packed sideways (packColumns), one generation does not have to share one row;
  * opts.offsets = { id: { dx, dy } } moves boxes by hand (export editor); opts.title adds a heading.
  */
-export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = false, mark = null, vertical = false, timeAxis = false, ppy = 4, offsets = null, title = '' } = {}) {
+export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = false, mark = null, vertical = false, timeAxis = false, lifetime = false, isDead = null, ppy = 4, offsets = null, title = '' } = {}) {
   const h = spouse ? 46 : 34;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const vgx = 10, vgy = 34;
@@ -237,25 +286,28 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
   // raw positions: horizontal = generations are columns (left -> right); vertical = generations are rows (top -> bottom)
   let P = lay.nodes.map((n) => (vertical ? { x: n.y * (w + vgx), y: n.gen * (h + vgy) } : { x: n.gen * (w + gx), y: n.y * (h + gy) }));
   let yrs = null, y0 = 0, y1 = 0;
+  const H = lay.nodes.map(() => h), alive = lay.nodes.map(() => false);
   if (time) {
     yrs = nodeYears(model, lay);
     y0 = Math.floor(Math.min(...yrs.map((o) => o.year)) / 10) * 10;
     P = P.map((p, i) => ({ x: p.x, y: (yrs[i].year - y0) * ppy }));
-    // same column: push a box down when it would overlap the one above it
-    const cols = new Map();
-    P.forEach((p, i) => { if (!cols.has(p.x)) cols.set(p.x, []); cols.get(p.x).push(i); });
-    for (const idx of cols.values()) {
-      idx.sort((a, b) => P[a].y - P[b].y);
-      for (let k = 1; k < idx.length; k++) { const min = P[idx[k - 1]].y + h + 8; if (P[idx[k]].y < min) P[idx[k]] = { x: P[idx[k]].x, y: min }; }
-    }
-    y1 = Math.ceil(Math.max(...yrs.map((o) => o.year)) / 10) * 10 + 10;
+    let last = Math.max(...yrs.map((o) => o.year));
+    if (lifetime) lay.nodes.forEach((n, i) => {
+      const p = model.persons[n.id], e = endYear(p, yrs[i].est ? null : yrs[i].year, isDead ? isDead(p) : undefined);
+      if (e != null && e > yrs[i].year) { H[i] = Math.max(h, (e - yrs[i].year) * ppy); last = Math.max(last, e); alive[i] = !yearIn(p.death.date); }
+    });
+    y1 = Math.ceil(last / 10) * 10 + 10;
+  }
+  if (vertical && lay.nodes.length) {
+    const col = packColumns(lay, P.map((p, i) => [p.y, p.y + H[i]]), time ? 6 : 1);
+    P = P.map((p, i) => ({ x: col[i] * (w + vgx), y: p.y }));
   }
   if (offsets) P = P.map((p, i) => { const o = offsets[lay.nodes[i].id]; return o ? { x: p.x + o.dx, y: p.y + o.dy } : p; });
   const left = time ? 46 : 4, top = 4 + (title ? 34 : 0);
   const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
   // with hand offsets keep the automatic origin, so dragging one box never shifts the others
   const minX = xs.length ? Math.min(offsets ? 0 : Infinity, ...xs) : 0, maxX = xs.length ? Math.max(...xs) : 0;
-  const minY = time || offsets ? Math.min(0, ...ys) : ys.length ? Math.min(...ys) : 0, maxY = ys.length ? Math.max(...ys) : 0;
+  const minY = time || offsets ? Math.min(0, ...ys) : ys.length ? Math.min(...ys) : 0, maxY = ys.length ? Math.max(...ys.map((y, i) => y + H[i] - h)) : 0;
   const pos = P.map((p) => ({ x: p.x - minX + left, y: p.y - minY + top }));
   let width = maxX - minX + w + left + 4, height = maxY - minY + h + top + 4;
   if (time) height = Math.max(height, (y1 - y0) * ppy - minY + top + 4);
@@ -273,8 +325,13 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
   }
   for (const [a, b] of lay.links) {
     const A = pos[a], B = pos[b];
-    if (vertical) {
-      const x1 = A.x + w / 2, y1 = A.y + h, x2 = B.x + w / 2, y2 = B.y;
+    if (vertical && B.y < A.y + H[a] + 8 && (B.x >= A.x + w || B.x + w <= A.x)) {
+      // child born while the parent's bar is still running: leave the bar from its side at the child's birth year
+      const right = B.x >= A.x + w, x1 = right ? A.x + w : A.x, x2 = B.x + w / 2;
+      const yb = Math.max(A.y + 10, Math.min(B.y - 8, A.y + H[a] - 4));
+      parts.push(`<path d="M${x1} ${yb} H${x2} V${B.y}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
+    } else if (vertical) {
+      const x1 = A.x + w / 2, y1 = A.y + H[a], x2 = B.x + w / 2, y2 = B.y;
       const my = time ? Math.min(y1 + 12, y2 - 4) : (y1 + y2) / 2;
       parts.push(`<path d="M${x1} ${y1} V${my} H${x2} V${y2}" fill="none" stroke="#b8a597" stroke-width="1.3"/>`);
     } else {
@@ -294,7 +351,8 @@ export function layoutToSvg(model, lay, { w = 150, gx = 22, gy = 6, spouse = fal
       const names = spousesOf(model, n.id).filter((s) => s.spouse).map((s) => displayName(model.persons[s.spouse])).join(', ');
       if (names) sp = `<text x="${x + 8}" y="${y + 41}" font-size="9.5" fill="#c94a24">⚭ ${esc(names.slice(0, 28))}</text>`;
     }
-    parts.push(`<g data-id="${esc(n.id)}">${est ? '<title>Rok urodzenia nieznany: miejsce na osi jest szacowane</title>' : ''}<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${est ? ' stroke-dasharray="4 3"' : ''}/>` +
+    parts.push(`<g data-id="${esc(n.id)}">${est ? '<title>Rok urodzenia nieznany: miejsce na osi jest szacowane</title>' : ''}<rect x="${x}" y="${y}" width="${w}" height="${H[i]}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${est ? ' stroke-dasharray="4 3"' : ''}/>` +
+      (H[i] > h ? `<line x1="${x + 4}" y1="${y + h}" x2="${x + w - 4}" y2="${y + h}" stroke="${stroke}" stroke-opacity=".25"/>${alive[i] ? `<text x="${x + w / 2}" y="${y + H[i] - 5}" font-size="9" text-anchor="middle" fill="#666">żyje ↓</text>` : ''}` : '') +
       `<text x="${x + 6}" y="${y + 14}" font-size="11" font-weight="600" fill="#111">${esc(displayName(p).slice(0, PICTO[p.sex] ? 22 : 25))}</text>` +
       `<text x="${x + 6}" y="${y + 27}" font-size="9.5" fill="#444">${esc(years(p))}</text>${sp}` +
       (PICTO[p.sex] ? `<path class="pic ${p.sex}" transform="translate(${x + w - 17} ${y + 4}) scale(.55)" fill="${p.sex === 'F' ? '#b5603a' : '#3f5a46'}" d="${PICTO[p.sex]}"/>` : '') + '</g>');

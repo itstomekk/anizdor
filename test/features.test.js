@@ -258,6 +258,31 @@ test('tree: time axis places people by birth year, estimates missing years, hono
   assert.match(moved, /Rodzina &lt;Nowaków&gt;/);
 });
 
+test('tree: time axis is exact, columns are packed, lifetime stretches boxes', async () => {
+  const { layoutForest, layoutToSvg, packColumns, endYear } = await import('../public/tree.js');
+  const m = emptyModel();
+  const P = (g, sex, b, d = '') => { const id = addPerson(m, { given: g, surname: 'A', sex }); m.persons[id].birth.date = b; m.persons[id].death.date = d; return id; };
+  const a = P('Jan', 'M', '1850', '1920'), b = P('Ewa', 'F', '1855', '1900');
+  addSpouse(m, a, b); const fid = Object.keys(m.families)[0];
+  const kids = [P('X', 'M', '1880', '1950'), P('Y', 'F', '1881', '1960'), P('Z', 'M', '1883')];
+  for (const k of kids) addChild(m, fid, k);
+  const lay = layoutForest(m);
+  const yOf = (s, id) => +s.match(new RegExp(`data-id="${id}">(?:<title>[^<]*</title>)?<rect x="[\\d.-]+" y="([\\d.-]+)"`))[1];
+  const hOf = (s, id) => +s.match(new RegExp(`data-id="${id}">(?:<title>[^<]*</title>)?<rect [^>]*height="([\\d.]+)"`))[1];
+  const svg = layoutToSvg(m, lay, { spouse: true, vertical: true, timeAxis: true });
+  // siblings born 1, 3 years apart: no pushing down, each sits exactly on its birth year
+  assert.equal(yOf(svg, kids[1]) - yOf(svg, kids[0]), 4); assert.equal(yOf(svg, kids[2]) - yOf(svg, kids[0]), 12);
+  const life = layoutToSvg(m, lay, { spouse: true, vertical: true, timeAxis: true, lifetime: true });
+  assert.equal(hOf(life, a), 70 * 4, '70 years of life = 280 px'); assert.equal(hOf(life, kids[0]), 70 * 4);
+  assert.equal(yOf(life, kids[0]) - yOf(life, a), 30 * 4);
+  assert.equal(endYear(m.persons[kids[2]], 1883, false, 2026), null, 'born 143 years ago, no death: unknown end');
+  assert.equal(endYear({ birth: {}, death: { date: '' } }, 1990, false, 2026), 2026, 'probably alive: up to today');
+  // packing: a short branch tucks into a free column instead of taking a new one
+  const lay2 = { nodes: [{ id: 'r' }, { id: 'c1' }, { id: 'c2' }, { id: 'g' }], links: [[0, 1], [0, 2], [1, 3]] };
+  const col = packColumns(lay2, [[0, 40], [100, 140], [100, 140], [200, 240]]);
+  assert.notEqual(col[1], col[2]); assert.ok(Math.max(...col) <= 1, 'three generations fit in two columns');
+});
+
 test('export: subtree ids and a valid one-page JPEG PDF', async () => {
   const { layoutForest } = await import('../public/tree.js');
   const { subtreeIds, jpegToPdf } = await import('../public/tree_export.js');

@@ -2,7 +2,7 @@ import { decodeGedcom, parseGedcom, serializeGedcom, validate } from './gedcom.j
 import { emptyModel, addPerson, addSpouse, addChild, addParent, parentsOf, childrenOf, spousesOf, removePerson, displayName, years,
   layoutAncestors, layoutDescendants, layoutForest, layoutToSvg } from './tree.js';
 import { formatDate, formatLong, toGedcomDate, yearOf, weekdayOf } from './dates.js';
-import { fold, lifeStatus, isLiving, mergePersons, anonymizeLiving, toCsv } from './ops.js';
+import { fold, lifeStatus, isLiving, isDeceased, mergePersons, anonymizeLiving, toCsv } from './ops.js';
 import { computeStats, upcomingBirthdays, moreStats } from './stats.js';
 import { runChecks, canFix, fixIssue, fixAllSafe, SAFE_FIXES, FIX_LABEL } from './checks.js';
 import { relate } from './kin.js';
@@ -20,9 +20,9 @@ const KEY = 'rodzina.ged.v1';
 let model = emptyModel();
 const adopt = (m) => { ensureExt(m); return m; };
 let version = 0;
-const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '', vertical: true, timeAxis: true };
+const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '', vertical: true, timeAxis: true, lifetime: false };
 // default: vertical tree, oldest on top, placed on a birth-year axis
-try { ui.vertical = localStorage.getItem('anizdor.treeDir') !== 'h'; ui.timeAxis = localStorage.getItem('anizdor.treeTime') !== '0'; } catch {}
+try { ui.vertical = localStorage.getItem('anizdor.treeDir') !== 'h'; ui.timeAxis = localStorage.getItem('anizdor.treeTime') !== '0'; ui.lifetime = localStorage.getItem('anizdor.treeLife') === '1'; } catch {}
 const undoStack = [], redoStack = [];
 const memo = { v: -1, stats: null, issues: null };
 let ignored = new Set();
@@ -302,10 +302,20 @@ function viewClassic(main, head) {
   };
   canvas.addEventListener('scroll', pinYears, { passive: true });
   const draw = () => {
-    svgText = layoutToSvg(model, lay, { spouse: true, mark, vertical: ui.vertical, timeAxis: ui.timeAxis });
+    svgText = layoutToSvg(model, lay, { spouse: true, mark, vertical: ui.vertical, timeAxis: ui.timeAxis, lifetime: ui.lifetime, isDead: isDeceased });
     svgNode = mountSvg(canvas, svgText, (gid, g) => showPersonPop(ctx, gid, g.querySelector('rect') || g, { onRelative: popAt }));
     zoomTo(ui.zoom);
   };
+  // start at the oldest person (earliest known birth year): horizontally centred, near the top
+  function centerOldest() {
+    let best = null, by = Infinity;
+    for (const n of lay.nodes) { const y = yearOf(model.persons[n.id].birth.date); if (y != null && y < by) { by = y; best = n.id; } }
+    const g = best && canvas.querySelector(`g[data-id="${CSS.escape(best)}"] rect`);
+    if (!g) return;
+    const r = g.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+    canvas.scrollLeft += r.left + r.width / 2 - (c.left + c.width / 2);
+    canvas.scrollTop += r.top - c.top - 40;
+  }
   const zl = el('button', { class: 'zl', title: 'Powiększenie 100%', onclick: () => zoomTo(1) }, '');
   const find = el('input', { type: 'search', placeholder: 'Podświetl osobę…', value: ui.find, style: '', oninput: (e) => {
     ui.find = e.target.value; mark.clear();
@@ -337,11 +347,12 @@ function viewClassic(main, head) {
     el('p', { class: 'mut treeinfo', title: 'Gałęzie to potomkowie osób bez znanych rodziców.' }, `${lay.nodes.length} osób · gałęzie: ${lay.trees} · ⚭ partner${lay.alone ? ` · ${lay.alone} bez powiązań (nienarysowani)` : ''} ${ui.vertical && ui.timeAxis ? ' · przerywana ramka = rok urodzenia szacowany' : ''} · kliknij osobę, aby zobaczyć szczegóły`),
     el('div', { class: 'treebar' }, find, el('button', { onclick: nextMatch }, 'Następny'), info, el('button', { onclick: () => zoomTo(ui.zoom - 0.15), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => zoomTo(ui.zoom + 0.15), title: 'Powiększ' }, '+'), el('button', { onclick: fit, title: 'Dopasuj do szerokości ekranu' }, 'Dopasuj'),
       el('button', { class: 'dir', title: 'Obróć układ drzewa', 'aria-pressed': String(ui.vertical), onclick: () => { ui.vertical = !ui.vertical; try { localStorage.setItem('anizdor.treeDir', ui.vertical ? 'v' : 'h'); } catch {} closePersonPop(); viewClassic(main, head); } }, ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'),
-      ui.vertical ? el('label', { class: 'inl', title: 'Każda osoba na wysokości swojego roku urodzenia' }, el('input', { type: 'checkbox', checked: ui.timeAxis, onchange: (e) => { ui.timeAxis = e.target.checked; try { localStorage.setItem('anizdor.treeTime', ui.timeAxis ? '1' : '0'); } catch {} closePersonPop(); draw(); } }), 'oś lat') : null,
-      el('button', { class: 'primary', title: 'Zapisz jako PNG, PDF lub SVG albo wydrukuj. Przed zapisem możesz poprzesuwać osoby.', onclick: () => { closePersonPop(); openTreeExport({ model, lay, vertical: ui.vertical, timeAxis: ui.timeAxis, download, say }); } }, 'Eksport…')),
+      ui.vertical ? el('label', { class: 'inl', title: 'Każda osoba na wysokości swojego roku urodzenia' }, el('input', { type: 'checkbox', checked: ui.timeAxis, onchange: (e) => { ui.timeAxis = e.target.checked; try { localStorage.setItem('anizdor.treeTime', ui.timeAxis ? '1' : '0'); } catch {} closePersonPop(); viewClassic(main, head); } }), 'oś lat') : null,
+      ui.vertical && ui.timeAxis ? el('label', { class: 'inl', title: 'Ramka osoby ciągnie się od roku urodzenia do roku śmierci: jej wysokość to długość życia' }, el('input', { type: 'checkbox', checked: ui.lifetime, onchange: (e) => { ui.lifetime = e.target.checked; try { localStorage.setItem('anizdor.treeLife', ui.lifetime ? '1' : '0'); } catch {} closePersonPop(); draw(); centerOldest(); } }), 'długość życia') : null,
+      el('button', { class: 'primary', title: 'Zapisz jako PNG, PDF lub SVG albo wydrukuj. Przed zapisem możesz poprzesuwać osoby.', onclick: () => { closePersonPop(); openTreeExport({ model, lay, vertical: ui.vertical, timeAxis: ui.timeAxis, lifetime: ui.lifetime, isDead: isDeceased, download, say }); } }, 'Eksport…')),
     canvas));
   draw();
-  if (ui.find) find.dispatchEvent(new Event('input'));
+  if (ui.find) find.dispatchEvent(new Event('input')); else requestAnimationFrame(centerOldest);
 }
 
 // ---------- statistics ----------
