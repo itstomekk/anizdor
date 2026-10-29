@@ -53,6 +53,8 @@ API (`functions/api/[[path]].js`, D1 binding `DB`, auth header `x-vault-auth`):
     npm test          # node:test, no dependencies (cloud API tested on node:sqlite as a D1 stand-in)
     npm run dev       # wrangler pages dev public (needs network on first run)
 
+🚀 **Deploy is automatic.** Every push to `main` runs the tests and publishes to Cloudflare Pages via GitHub Actions (`.github/workflows/deploy.yml`, secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`). Watch runs at https://github.com/itstomekk/anizdor/actions. Manual fallback: `npx wrangler pages deploy public --project-name anizdor --branch main`.
+
 Local cloud: put `SETUP_CODE=...` in `.dev.vars` (gitignored), then `npx wrangler@4 pages dev public --persist-to <scratch dir>`.
 
 ## Privacy

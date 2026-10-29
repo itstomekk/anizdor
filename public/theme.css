@@ -215,3 +215,6 @@ h2 { font-size: 1.5rem; }
 @media (max-width: 1150px) { .actions .icb .lbl { display: none; } .actions .icb { padding-left: .4rem; padding-right: .4rem; } }
 @media (max-width: 860px) { .top { padding: .25rem .5rem; } main { padding: 0 .45rem 1rem; } .card { padding: .5rem; } }
 @media (max-width: 520px) { .actions #export { display: inline-flex; } }
+
+.ic.gh { fill: currentColor; stroke: none; }
+#gh { text-decoration: none; color: var(--tx); min-width: 2rem; justify-content: center; }
