@@ -239,3 +239,53 @@ test('tree: vertical layout puts generations in rows', async () => {
   assert.ok(hw > hh, 'horizontal is wide'); assert.ok(vh > 46 * 2, 'vertical stacks 2 generations'); assert.ok(vw > 150 * 2, 'children side by side');
   assert.match(layoutToSvg(m, lay, { vertical: true }), /d="M\d+(\.\d+)? \d+(\.\d+)? V/);
 });
+
+test('tree: time axis places people by birth year, estimates missing years, honours offsets', async () => {
+  const { layoutForest, layoutToSvg, nodeYears } = await import('../public/tree.js');
+  const { m, adam, piotr, zosia } = family();
+  m.persons[zosia].birth.date = '';
+  const lay = layoutForest(m);
+  const yrs = nodeYears(m, lay);
+  const idx = (id) => lay.nodes.findIndex((n) => n.id === id);
+  assert.equal(yrs[idx(adam)].year, 1900); assert.equal(yrs[idx(adam)].est, false);
+  assert.equal(yrs[idx(zosia)].est, true); assert.equal(yrs[idx(zosia)].year, 1932 + 28);
+  const svg = layoutToSvg(m, lay, { spouse: true, vertical: true, timeAxis: true });
+  const yOf = (s, id) => +s.match(new RegExp(`data-id="${id}">(?:<title>[^<]*</title>)?<rect x="[\\d.-]+" y="([\\d.-]+)"`))[1];
+  assert.ok(yOf(svg, piotr) - yOf(svg, adam) >= (1960 - 1900) * 4 - 1, '60 years apart = 240px at 4 px/year');
+  assert.match(svg, />1900</); assert.match(svg, /stroke-dasharray="4 3"/);
+  const moved = layoutToSvg(m, lay, { spouse: true, vertical: true, timeAxis: true, offsets: { [piotr]: { dx: 0, dy: 50 } }, title: 'Rodzina <Nowaków>' });
+  assert.equal(yOf(moved, piotr) - yOf(moved, adam), yOf(svg, piotr) - yOf(svg, adam) + 50);
+  assert.match(moved, /Rodzina &lt;Nowaków&gt;/);
+});
+
+test('export: subtree ids and a valid one-page JPEG PDF', async () => {
+  const { layoutForest } = await import('../public/tree.js');
+  const { subtreeIds, jpegToPdf } = await import('../public/tree_export.js');
+  const { m, adam, jan, piotr, kasia, zosia } = family();
+  const lay = layoutForest(m);
+  const sub = subtreeIds(lay, jan);
+  assert.ok(sub.has(jan) && sub.has(piotr) && sub.has(kasia)); assert.ok(!sub.has(adam) && !sub.has(zosia));
+  const jpeg = new Uint8Array([0xff, 0xd8, 1, 2, 3, 0xff, 0xd9]);
+  const pdf = jpegToPdf(jpeg, 300, 100, { paper: 'a4' });
+  const txt = Buffer.from(pdf).toString('latin1');
+  assert.ok(txt.startsWith('%PDF-1.4')); assert.ok(txt.trimEnd().endsWith('%%EOF'));
+  assert.match(txt, /\/MediaBox \[0 0 841\.89 595\.28\]/, 'wide drawing -> landscape A4');
+  const start = +txt.match(/startxref\n(\d+)/)[1];
+  assert.ok(txt.slice(start).startsWith('xref'));
+  const offs = [...txt.matchAll(/(\d{10}) 00000 n/g)].map((x) => +x[1]);
+  offs.forEach((o, i) => assert.ok(txt.slice(o).startsWith(`${i + 1} 0 obj`), `xref offset of object ${i + 1}`));
+  assert.ok(Buffer.from(pdf).includes(Buffer.from(jpeg)));
+});
+
+test('life lines: overlap years and ordering', async () => {
+  const { overlapYears, orderBars } = await import('../public/lifelines.js');
+  const { lifeBars } = await import('../public/extras.js');
+  assert.equal(overlapYears({ from: 1900, to: 1970 }, { from: 1960, to: 2000 }), 10);
+  assert.equal(overlapYears({ from: 1900, to: 1950 }, { from: 1960, to: 2000 }), 0);
+  const { m, adam, ewa, jan, maria, tom, zosia } = family();
+  const bars = lifeBars(m);
+  assert.deepEqual(orderBars(m, bars, 'birth').slice(0, 2).map((b) => b.id), [adam, ewa]);
+  const fam = orderBars(m, bars, 'family').map((b) => b.id);
+  assert.ok(fam.indexOf(jan) < fam.indexOf(maria) || fam.indexOf(maria) < fam.indexOf(zosia), 'tree order keeps families together');
+  assert.equal(orderBars(m, bars, 'surname')[0].id === tom || m.persons[orderBars(m, bars, 'surname')[0].id].surname === 'Kowal', true);
+});

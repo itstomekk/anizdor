@@ -12,13 +12,17 @@ import { eventsSection, sourcesSection, timelineTab, photosTab, viewTimeline, vi
 import { putPhoto, readZip, allPhotoIds, deletePhoto, clearPhotos } from './media.js';
 import { viewBoard as viewViz } from './views_viz.js';
 import { createCloud } from './cloud.js';
+import { openTreeExport } from './tree_export.js';
+import { showPersonPop, closePersonPop } from './person_pop.js';
+import { viewLifelines } from './lifelines.js';
 
 const KEY = 'rodzina.ged.v1';
 let model = emptyModel();
 const adopt = (m) => { ensureExt(m); return m; };
 let version = 0;
-const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '', vertical: false };
-try { ui.vertical = localStorage.getItem('rodzina.treeDir') === 'v'; } catch {}
+const ui = { q: '', filter: 'all', sort: 'name', gens: 5, zoom: 1, find: '', vertical: true, timeAxis: true };
+// default: vertical tree, oldest on top, placed on a birth-year axis
+try { ui.vertical = localStorage.getItem('anizdor.treeDir') !== 'h'; ui.timeAxis = localStorage.getItem('anizdor.treeTime') !== '0'; } catch {}
 const undoStack = [], redoStack = [];
 const memo = { v: -1, stats: null, issues: null };
 let ignored = new Set();
@@ -93,7 +97,7 @@ function render() {
   const main = $('main');
   if (!count()) { main.replaceChildren(emptyState()); return; }
   ensureExt(model);
-  const views = { osoby: viewPersons, tablica: (mn, rt) => viewViz(mn, rt, ctx, { classic: viewClassic, download }), 'os-czasu': (mn) => viewTimeline(mn, ctx), miejsca: (mn) => viewPlaces(mn, ctx), zrodla: (mn) => viewSources(mn, ctx), statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools };
+  const views = { osoby: viewPersons, tablica: (mn, rt) => viewViz(mn, rt, ctx, { classic: viewClassic, lines: viewLifelines, download }), 'os-czasu': (mn) => viewTimeline(mn, ctx), miejsca: (mn) => viewPlaces(mn, ctx), zrodla: (mn) => viewSources(mn, ctx), statystyki: viewStats, kontrola: viewChecks, narzedzia: viewTools };
   if (navView === 'narzedzia') {
     const n = issues().filter((i) => i.sev !== 'info' && !ignored.has(issueKey(i))).length;
     const inner = el('div');
@@ -235,7 +239,7 @@ function mountSvg(canvas, svgText, onNode) {
   const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
   const node = document.importNode(doc.documentElement, true);
   canvas.replaceChildren(node);
-  node.querySelectorAll('g[data-id]').forEach((g) => g.addEventListener('click', () => onNode(g.dataset.id)));
+  node.querySelectorAll('g[data-id]').forEach((g) => g.addEventListener('click', () => onNode(g.dataset.id, g)));
   return node;
 }
 
@@ -291,8 +295,8 @@ function viewClassic(main, head) {
     zl.textContent = Math.round(ui.zoom * 100) + '%';
   };
   const draw = () => {
-    svgText = layoutToSvg(model, lay, { spouse: true, mark, vertical: ui.vertical });
-    svgNode = mountSvg(canvas, svgText, (gid) => goPerson(gid));
+    svgText = layoutToSvg(model, lay, { spouse: true, mark, vertical: ui.vertical, timeAxis: ui.timeAxis });
+    svgNode = mountSvg(canvas, svgText, (gid, g) => showPersonPop(ctx, gid, g.querySelector('rect') || g, { onRelative: popAt }));
     zoomTo(ui.zoom);
   };
   const zl = el('button', { class: 'zl', title: 'Powiększenie 100%', onclick: () => zoomTo(1) }, '');
@@ -314,12 +318,20 @@ function viewClassic(main, head) {
     info.textContent = `Znaleziono: ${hits.length} (pokazano ${cur + 1})`;
   };
   const fit = () => { const vb = svgNode.viewBox.baseVal; zoomTo((canvas.clientWidth - 8) / vb.width); };
+  // relative clicked in the popover: jump to that person in the tree and show their popover there
+  function popAt(pid) {
+    const g = canvas.querySelector(`g[data-id="${CSS.escape(pid)}"]`);
+    if (!g) return showPersonPop(ctx, pid, null, { onRelative: popAt });
+    g.scrollIntoView({ block: 'center', inline: 'center' });
+    showPersonPop(ctx, pid, g.querySelector('rect') || g, { onRelative: popAt });
+  }
   main.replaceChildren(el('div', { class: 'card', style: 'margin-top:.3rem' },
     head,
-    el('p', { class: 'mut treeinfo', title: 'Gałęzie to potomkowie osób bez znanych rodziców.' }, `${lay.nodes.length} osób · gałęzie: ${lay.trees} · ⚭ partner${lay.alone ? ` · ${lay.alone} bez powiązań (nienarysowani)` : ''} · kliknij osobę, aby otworzyć kartę`),
+    el('p', { class: 'mut treeinfo', title: 'Gałęzie to potomkowie osób bez znanych rodziców.' }, `${lay.nodes.length} osób · gałęzie: ${lay.trees} · ⚭ partner${lay.alone ? ` · ${lay.alone} bez powiązań (nienarysowani)` : ''} ${ui.vertical && ui.timeAxis ? ' · przerywana ramka = rok urodzenia szacowany' : ''} · kliknij osobę, aby zobaczyć szczegóły`),
     el('div', { class: 'treebar' }, find, el('button', { onclick: nextMatch }, 'Następny'), info, el('button', { onclick: () => zoomTo(ui.zoom - 0.15), title: 'Pomniejsz' }, '−'), zl, el('button', { onclick: () => zoomTo(ui.zoom + 0.15), title: 'Powiększ' }, '+'), el('button', { onclick: fit, title: 'Dopasuj do szerokości ekranu' }, 'Dopasuj'),
-      el('button', { class: 'dir', title: 'Obróć układ drzewa', 'aria-pressed': String(ui.vertical), onclick: (e) => { ui.vertical = !ui.vertical; try { localStorage.setItem('rodzina.treeDir', ui.vertical ? 'v' : 'h'); } catch {} e.currentTarget.textContent = ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'; e.currentTarget.setAttribute('aria-pressed', String(ui.vertical)); draw(); } }, ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'),
-      el('button', { onclick: () => download('drzewo-rodziny.svg', svgText, 'image/svg+xml') }, 'SVG'), el('button', { onclick: () => print(), title: 'Drukuj albo zapisz jako PDF' }, 'Drukuj')),
+      el('button', { class: 'dir', title: 'Obróć układ drzewa', 'aria-pressed': String(ui.vertical), onclick: () => { ui.vertical = !ui.vertical; try { localStorage.setItem('anizdor.treeDir', ui.vertical ? 'v' : 'h'); } catch {} closePersonPop(); viewClassic(main, head); } }, ui.vertical ? '⇅ Pionowo' : '⇄ Poziomo'),
+      ui.vertical ? el('label', { class: 'inl', title: 'Każda osoba na wysokości swojego roku urodzenia' }, el('input', { type: 'checkbox', checked: ui.timeAxis, onchange: (e) => { ui.timeAxis = e.target.checked; try { localStorage.setItem('anizdor.treeTime', ui.timeAxis ? '1' : '0'); } catch {} closePersonPop(); draw(); } }), 'oś lat') : null,
+      el('button', { class: 'primary', title: 'Zapisz jako PNG, PDF lub SVG albo wydrukuj. Przed zapisem możesz poprzesuwać osoby.', onclick: () => { closePersonPop(); openTreeExport({ model, lay, vertical: ui.vertical, timeAxis: ui.timeAxis, download, say }); } }, 'Eksport…')),
     canvas));
   draw();
   if (ui.find) find.dispatchEvent(new Event('input'));
