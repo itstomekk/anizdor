@@ -1,9 +1,9 @@
 import { decodeGedcom, parseGedcom, serializeGedcom, validate } from './gedcom.js';
 import { emptyModel, addPerson, addSpouse, addChild, addParent, parentsOf, childrenOf, spousesOf, removePerson, displayName, years,
   layoutAncestors, layoutDescendants, layoutForest, layoutToSvg } from './tree.js';
-import { formatDate, formatLong, toGedcomDate, yearOf } from './dates.js';
+import { formatDate, formatLong, toGedcomDate, yearOf, weekdayOf } from './dates.js';
 import { fold, lifeStatus, isLiving, mergePersons, anonymizeLiving, toCsv } from './ops.js';
-import { computeStats, upcomingBirthdays } from './stats.js';
+import { computeStats, upcomingBirthdays, moreStats } from './stats.js';
 import { runChecks, canFix, fixIssue, fixAllSafe, SAFE_FIXES, FIX_LABEL } from './checks.js';
 import { relate } from './kin.js';
 import { $, el, avatar, bars, hist, stack, download, personLabel } from './ui.js';
@@ -215,7 +215,7 @@ function personPanel(panel, id, tab) {
   const p = model.persons[id];
   panel.replaceChildren();
   const head = el('div', { class: 'ph' }, avatar(p, true), el('div', {}, el('h2', {}, displayName(p)),
-    el('div', {}, lifeLine(p), el('small', {}, ` ${formatLong(p.birth.date) ? '* ' + formatLong(p.birth.date) : ''}${formatLong(p.death.date) ? '  † ' + formatLong(p.death.date) : ''}`))));
+    el('div', {}, lifeLine(p), el('small', {}, ` ${formatLong(p.birth.date) ? '* ' + formatLong(p.birth.date) + (weekdayOf(p.birth.date) ? ` (${weekdayOf(p.birth.date)})` : '') : ''}${formatLong(p.death.date) ? '  † ' + formatLong(p.death.date) + (weekdayOf(p.death.date) ? ` (${weekdayOf(p.death.date)})` : '') : ''}`))));
   panel.append(head);
   panel.append(el('nav', { class: 'tabs' }, [['info', 'Osoba'], ['czas', 'Oś czasu'], ['foto', `Zdjęcia${p.photos?.length ? ' (' + p.photos.length + ')' : ''}`], ['anc', 'Przodkowie'], ['desc', 'Potomkowie']].map(([t, n]) => el('button', { class: tab === t ? 'on' : '', onclick: () => goPerson(id, t) }, n))));
   if (tab === 'info') return personInfo(panel, id);
@@ -245,8 +245,8 @@ function personInfo(panel, id) {
   const ds = (ev) => (v) => { ev.date = toGedcomDate(v); };
   panel.append(el('div', { class: 'grid' },
     field('Imię (imiona)', p.given, (v) => { p.given = v; }), field('Nazwisko', p.surname, (v) => { p.surname = v; }), el('label', {}, 'Płeć', sexSel),
-    field('Data urodzenia', formatDateInput(p.birth.date), ds(p.birth), { hint: dateHint }), field('Miejsce urodzenia', p.birth.place, (v) => { p.birth.place = v; }),
-    field('Data śmierci', formatDateInput(p.death.date), ds(p.death), { hint: dateHint }), field('Miejsce śmierci', p.death.place, (v) => { p.death.place = v; }),
+    field(weekdayOf(p.birth.date) ? `Data urodzenia (${weekdayOf(p.birth.date)})` : 'Data urodzenia', formatDateInput(p.birth.date), ds(p.birth), { hint: dateHint }), field('Miejsce urodzenia', p.birth.place, (v) => { p.birth.place = v; }),
+    field(weekdayOf(p.death.date) ? `Data śmierci (${weekdayOf(p.death.date)})` : 'Data śmierci', formatDateInput(p.death.date), ds(p.death), { hint: dateHint }), field('Miejsce śmierci', p.death.place, (v) => { p.death.place = v; }),
     field('Notatki', p.notes.join('\n'), (v) => { p.notes = v ? [v] : []; }, { wide: true, area: true })));
 
   const { father, mother } = parentsOf(model, id);
@@ -352,7 +352,37 @@ function viewStats(main) {
       card('Liczba dzieci w rodzinie', hist(s.family.sizes), el('p', { class: 'mut' }, `Rodzin bez dzieci: ${s.family.childless}. `, s.family.largest && el('a', { onclick: () => { const f = model.families[s.family.largest]; goPerson(f.husband || f.wife); } }, `Największa: ${model.families[s.family.largest].children.length} dzieci`))),
       card('Wiek rodziców przy narodzinach dziecka (średnio, lata)', bars([{ name: `Ojcowie (${s.parentAge.nM})`, n: Math.round((s.parentAge.M || 0) * 10) / 10 }, { name: `Matki (${s.parentAge.nF})`, n: Math.round((s.parentAge.F || 0) * 10) / 10 }], { max: 50, fmt: (n) => nf(n) }), el('p', { class: 'mut' }, 'Tylko dzieci i rodzice ze znanym rokiem urodzenia.')),
       card('Śluby według dekad', hist(s.marriagesByDecade)),
-      cardSpan('Rodowód', el('p', {}, `Najdłuższa linia ma ${s.generations.max} pokoleń`, s.generations.deepest && [' (', el('a', { onclick: () => goPerson(s.generations.deepest, 'anc') }, `przodkowie: ${displayName(model.persons[s.generations.deepest])}`), ')'], `. Gałęzi początkowych (osoby bez znanych rodziców, z dziećmi): ${s.generations.roots}.`)))));
+      cardSpan('Rodowód', el('p', {}, `Najdłuższa linia ma ${s.generations.max} pokoleń`, s.generations.deepest && [' (', el('a', { onclick: () => goPerson(s.generations.deepest, 'anc') }, `przodkowie: ${displayName(model.persons[s.generations.deepest])}`), ')'], `. Gałęzi początkowych (osoby bez znanych rodziców, z dziećmi): ${s.generations.roots}.`)),
+      ...extraStatCards())));
+}
+function extraStatCards() {
+  const x = moreStats(model);
+  const who = (id) => el('a', { onclick: () => goPerson(id) }, displayName(model.persons[id]));
+  const famWho = (fid) => { const f = model.families[fid]; return [f.husband && who(f.husband), f.husband && f.wife && ' i ', f.wife && who(f.wife)]; };
+  const nonEmpty = (a) => a.some((i) => i.n);
+  const note = (t) => el('p', { class: 'mut' }, t);
+  const rec = x.records, recs = [
+    rec.oldestLiving && el('li', {}, el('span', {}, 'Najstarsza żyjąca osoba: ', who(rec.oldestLiving.id)), el('span', { class: 'mut' }, `ok. ${rec.oldestLiving.age} lat`)),
+    rec.longestMarriage && el('li', {}, el('span', {}, 'Najdłuższe małżeństwo: ', ...famWho(rec.longestMarriage.fam)), el('span', { class: 'mut' }, `${rec.longestMarriage.years} lat${rec.longestMarriage.ongoing ? ' i trwa' : ''}`)),
+    rec.mostKids && el('li', {}, el('span', {}, 'Najwięcej dzieci: ', who(rec.mostKids.id)), el('span', { class: 'mut' }, `${rec.mostKids.n}`)),
+    rec.youngestMother && el('li', {}, el('span', {}, 'Najmłodsza matka: ', who(rec.youngestMother.id)), el('span', { class: 'mut' }, `${rec.youngestMother.age} lat`)),
+    rec.youngestFather && el('li', {}, el('span', {}, 'Najmłodszy ojciec: ', who(rec.youngestFather.id)), el('span', { class: 'mut' }, `${rec.youngestFather.age} lat`)),
+    x.spouseGap.biggest && el('li', {}, el('span', {}, 'Największa różnica wieku w parze: ', ...famWho(x.spouseGap.biggest.fam)), el('span', { class: 'mut' }, `${x.spouseGap.biggest.gap} lat`)),
+  ].filter(Boolean);
+  return [
+    card('Rekordy rodziny', recs.length ? el('ul', { class: 'plain' }, recs) : note('Za mało dat, żeby wyznaczyć rekordy.')),
+    card('Dzień tygodnia urodzin', x.birthWeekdayN ? bars(x.birthWeekday) : note('Brak pełnych dat urodzenia.'), x.birthWeekdayN && note(`Na podstawie ${x.birthWeekdayN} osób z pełną datą urodzenia (kalendarz gregoriański).`)),
+    card('Miesiąc urodzin', nonEmpty(x.birthMonth) ? bars(x.birthMonth) : note('Brak dat z miesiącem.')),
+    card('Miesiąc zgonów', nonEmpty(x.deathMonth) ? bars(x.deathMonth) : note('Brak dat zgonu z miesiącem.')),
+    card('Miesiąc ślubów', nonEmpty(x.marriageMonth) ? bars(x.marriageMonth) : note('Brak dat ślubu z miesiącem.'), nonEmpty(x.marriageMonth) && note('Dawniej śluby rzadko brano w Adwencie i Wielkim Poście.')),
+    card('Wiek przy ślubie (średnio, lata)', (x.marriageAge.nM || x.marriageAge.nF) ? bars([{ name: `Mężczyźni (${x.marriageAge.nM})`, n: Math.round((x.marriageAge.M || 0) * 10) / 10 }, { name: `Kobiety (${x.marriageAge.nF})`, n: Math.round((x.marriageAge.F || 0) * 10) / 10 }], { max: 40, fmt: (n) => nf(n) }) : note('Brak dat ślubu i urodzenia.'),
+      x.spouseGap.n && note(`Średnia różnica wieku między małżonkami: ${nf(x.spouseGap.avg)} lat (${x.spouseGap.n} par).`)),
+    card('Długość życia wg stulecia urodzenia', x.lifeByCentury.length ? bars(x.lifeByCentury.map((c) => ({ name: `${c.name} (${c.count})`, n: c.n })), { fmt: (n) => nf(n) + ' lat' }) : note('Za mało pełnych dat.')),
+    card('Imiona męskie', x.topGivenM.length ? bars(x.topGivenM, { onclick: (i) => { ui.q = i.name; ui.filter = 'all'; go('osoby'); } }) : note('Brak danych.')),
+    card('Imiona żeńskie', x.topGivenF.length ? bars(x.topGivenF, { onclick: (i) => { ui.q = i.name; ui.filter = 'all'; go('osoby'); } }) : note('Brak danych.')),
+    card('Końcówki nazwisk', x.surnameEndings.length ? bars(x.surnameEndings) : note('Brak nazwisk.')),
+    card('Wspólne urodziny', x.sharedBirthdays.length ? el('ul', { class: 'plain' }, x.sharedBirthdays.map((ids) => { const d = model.persons[ids[0]].birth.date; return el('li', {}, el('span', {}, ...ids.slice(0, 4).flatMap((id, i) => [i ? ', ' : '', who(id)])), el('span', { class: 'mut' }, formatLong(d).replace(/ \d{4}$/, ''))); })) : note('Nikt nie dzieli dnia urodzin.')),
+  ];
 }
 const card = (title, ...body) => el('div', { class: 'card' }, el('h3', {}, title), ...body);
 const cardSpan = (title, ...body) => { const c = card(title, ...body); c.classList.add('span'); return c; };

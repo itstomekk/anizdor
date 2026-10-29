@@ -200,3 +200,29 @@ test('checks: one-click repairs', async () => {
   assert.equal(f.husband, b); assert.equal(m.persons[b].birth.date, '1950');
   assert.deepEqual(validate(m), []);
 });
+
+test('dates: weekday of birth', async () => {
+  const { weekdayOf } = await import('../public/dates.js');
+  assert.equal(weekdayOf('11 NOV 1918'), 'poniedziałek');
+  assert.equal(weekdayOf('1 SEP 1939'), 'piątek');
+  assert.equal(weekdayOf('29 OCT 2026'), 'czwartek');
+  assert.equal(weekdayOf('1950'), ''); assert.equal(weekdayOf('ABT 12 MAR 1950'), ''); assert.equal(weekdayOf('31 FEB 1950'), '');
+});
+test('stats: moreStats', async () => {
+  const { moreStats } = await import('../public/stats.js');
+  const m = emptyModel();
+  const mk = (g, s, sex, b, d = '') => { const id = addPerson(m, { given: g, surname: s, sex }); m.persons[id].birth.date = b; m.persons[id].death.date = d; return id; };
+  const h = mk('Jan', 'Kowalski', 'M', '1 SEP 1939', '2000'), w = mk('Ewa', 'Kowalska', 'F', '11 NOV 1945', '2010');
+  const fam = addSpouse(m, h, w); m.families[Object.keys(m.families)[0]].marriage.date = '15 JUN 1965';
+  const k = mk('Ola', 'Kowalska', 'F', '1 SEP 1966'); addChild(m, Object.keys(m.families)[0], k);
+  const s = moreStats(m, NOW);
+  assert.equal(s.birthWeekdayN, 3);
+  assert.deepEqual(['piątek', 'niedziela', 'czwartek'].map((d) => s.birthWeekday.find((x) => x.name === d).n), [1, 1, 1]);
+  assert.equal(s.marriageMonth[5].n, 1);
+  assert.equal(s.marriageAge.M, 26); assert.equal(s.marriageAge.F, 20);
+  assert.equal(s.spouseGap.avg, 6);
+  assert.equal(s.records.longestMarriage.years, 35);
+  assert.equal(s.records.youngestMother.age, 21);
+  assert.equal(s.sharedBirthdays[0].length, 2);
+  assert.equal(s.surnameEndings[0].name, '-ski / -cki');
+});

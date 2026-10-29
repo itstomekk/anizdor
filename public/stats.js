@@ -125,3 +125,80 @@ export function upcomingBirthdays(model, now = new Date(), days = 45) {
 }
 
 export { displayName, fold };
+
+const MONTHS_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
+const WEEKDAYS = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'];
+function weekdayIdx(d) {
+  if (!d || !d.day || !d.month || d.qual || d.year < 1583) return null;
+  const dt = new Date(2000, 0, 1); dt.setFullYear(d.year, d.month - 1, d.day);
+  return dt.getMonth() === d.month - 1 ? (dt.getDay() + 6) % 7 : null;
+}
+const byIndex = (labels, counts) => labels.map((name, i) => ({ name, n: counts[i] || 0 }));
+
+/** Extra statistics: calendar patterns, marriage ages, records. Pure; `now` injectable. */
+export function moreStats(model, now = new Date()) {
+  const P = model.persons, F = Object.values(model.families);
+  const bWd = {}, bMon = {}, dMon = {}, mMon = {}, sameDay = {};
+  const givenM = {}, givenF = {}, endings = {};
+  const lifeByCentury = {};
+  let nWd = 0;
+  for (const p of Object.values(P)) {
+    const b = parseDate(p.birth.date), d = parseDate(p.death.date);
+    const wd = weekdayIdx(b); if (wd != null) { bump(bWd, wd); nWd++; }
+    if (b?.month && !b.qual) bump(bMon, b.month - 1);
+    if (d?.month && !d.qual) bump(dMon, d.month - 1);
+    if (b?.month && b.day && !b.qual) (sameDay[`${b.day}.${b.month}`] ||= []).push(p.id);
+    const g = (p.given || '').split(/\s+/)[0];
+    if (g) bump(p.sex === 'M' ? givenM : p.sex === 'F' ? givenF : {}, g);
+    const s = fold(p.surname || '');
+    if (s.length > 3) {
+      const e = ['ski', 'cki', 'dzki', 'ska', 'cka', 'dzka', 'wicz', 'owicz', 'ewicz', 'czyk', 'czak', 'ak', 'ek', 'ik', 'uk', 'yk', 'as', 'el'].sort((a, b2) => b2.length - a.length).find((x) => s.endsWith(x));
+      const k = !e ? 'inne' : /sk|ck|dzk/.test(e) ? '-ski / -cki' : /wicz/.test(e) ? '-wicz' : /cz[yi]k|czak/.test(e) ? '-czyk / -czak' : /^(ak|ek|ik|uk|yk)$/.test(e) ? '-ak / -ek / -ik / -uk' : 'inne';
+      bump(endings, k);
+    }
+    const by = b?.year, dy = d?.year;
+    if (by != null && dy != null && dy >= by && dy - by <= 120) (lifeByCentury[Math.floor(by / 100) * 100] ||= []).push(dy - by);
+  }
+  // marriages: month, ages, spouse gap, longest marriage
+  const firstAge = { M: [], F: [] }, gaps = [];
+  let biggestGap = null, longest = null;
+  for (const f of F) {
+    const md = parseDate(f.marriage.date);
+    if (md?.month && !md.qual) bump(mMon, md.month - 1);
+    const h = P[f.husband], w = P[f.wife];
+    const hy = h && yearOf(h.birth.date), wy = w && yearOf(w.birth.date);
+    if (md) for (const [k, py] of [['M', hy], ['F', wy]]) if (py != null && md.year - py >= 14 && md.year - py <= 80) firstAge[k].push(md.year - py);
+    if (hy != null && wy != null) { const gp = Math.abs(hy - wy); gaps.push(gp); if (!biggestGap || gp > biggestGap.gap) biggestGap = { gap: gp, fam: f.id }; }
+    if (md && h && w) {
+      const hd = yearOf(h.death.date), wd = yearOf(w.death.date);
+      const alive = !isDeceased(h) && !isDeceased(w);
+      const end = alive ? now.getFullYear() : (hd != null && wd != null ? Math.min(hd, wd) : null);
+      if (end != null && end >= md.year && end - md.year < 90 && (!longest || end - md.year > longest.years)) longest = { years: end - md.year, fam: f.id, ongoing: alive };
+    }
+  }
+  // records
+  let oldestLiving = null, youngestMother = null, youngestFather = null, mostKids = null;
+  for (const p of Object.values(P)) {
+    const by = yearOf(p.birth.date);
+    if (by != null && lifeStatus(p, now) === 'living' && (!oldestLiving || by < oldestLiving.year)) oldestLiving = { id: p.id, year: by, age: now.getFullYear() - by };
+    const kids = childrenOf(model, p.id);
+    if (!mostKids || kids.length > mostKids.n) mostKids = { id: p.id, n: kids.length };
+    if (by != null) for (const c of kids) {
+      const cy = yearOf(P[c]?.birth.date); if (cy == null || cy - by < 12 || cy - by > 70) continue;
+      const rec = { id: p.id, age: cy - by, child: c };
+      if (p.sex === 'F' && (!youngestMother || rec.age < youngestMother.age)) youngestMother = rec;
+      if (p.sex === 'M' && (!youngestFather || rec.age < youngestFather.age)) youngestFather = rec;
+    }
+  }
+  const twinsDay = Object.values(sameDay).filter((ids) => ids.length > 1).sort((a, b) => b.length - a.length);
+  return {
+    birthWeekday: byIndex(WEEKDAYS, bWd), birthWeekdayN: nWd,
+    birthMonth: byIndex(MONTHS_SHORT, bMon), deathMonth: byIndex(MONTHS_SHORT, dMon), marriageMonth: byIndex(MONTHS_SHORT, mMon),
+    marriageAge: { M: avg(firstAge.M), F: avg(firstAge.F), nM: firstAge.M.length, nF: firstAge.F.length },
+    spouseGap: { avg: avg(gaps), n: gaps.length, biggest: biggestGap },
+    lifeByCentury: Object.entries(lifeByCentury).sort((a, b) => a[0] - b[0]).map(([c, a]) => ({ name: `ur. ${c}–${+c + 99}`, n: Math.round(avg(a) * 10) / 10, count: a.length })),
+    topGivenM: top(givenM, 8), topGivenF: top(givenF, 8), surnameEndings: top(endings, 6),
+    sharedBirthdays: twinsDay.slice(0, 6),
+    records: { oldestLiving, youngestMother, youngestFather, mostKids: mostKids?.n ? mostKids : null, longestMarriage: longest },
+  };
+}

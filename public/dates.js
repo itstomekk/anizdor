@@ -57,3 +57,14 @@ export function toGedcomDate(input) {
 }
 
 export function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
+
+export const PL_WEEKDAYS = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'];
+/** Weekday index 0=Monday..6=Sunday for an exact (day-precise, unqualified) Gregorian date, else null. */
+export function weekdayIndex(s) {
+  const d = parseDate(s);
+  if (!d || !d.day || !d.month || d.qual || d.year < 1583 || d.day > daysInMonth(d.year, d.month)) return null;
+  const dt = new Date(2000, 0, 1); dt.setFullYear(d.year, d.month - 1, d.day);
+  return (dt.getDay() + 6) % 7;
+}
+/** Polish weekday name ("niedziela") or ''. */
+export const weekdayOf = (s) => { const i = weekdayIndex(s); return i == null ? '' : PL_WEEKDAYS[i]; };
