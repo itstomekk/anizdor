@@ -53,7 +53,7 @@ export function runChecks(model, now = new Date()) {
   const P = model.persons;
   const nm = (id) => displayName(P[id]);
 
-  for (const msg of validate(model)) add('err', 'ref', [], `Uszkodzone powiązanie w pliku: ${msg}`);
+  for (const msg of validate(model)) add('err', 'ref', [], `Uszkodzone powiązanie w pliku: ${msg.replace('missing person', 'brak osoby').replace('missing family', 'brak rodziny').replace(/@/g, '')}`);
 
   const depth = generationDepth(model);
   for (const p of Object.values(P)) {
@@ -92,4 +92,61 @@ export function runChecks(model, now = new Date()) {
   for (const g of findDuplicateGroups(model)) add(g.strong ? 'warn' : 'info', 'dup', g.ids, `${g.strong ? 'Prawdopodobny duplikat' : 'Możliwy duplikat'}: ${g.name} (${g.ids.length} osoby)`);
   const order = { err: 0, warn: 1, info: 2 };
   return issues.sort((a, b) => order[a.sev] - order[b.sev] || a.code.localeCompare(b.code));
+}
+
+// ---------- repairs ----------
+/** Issue codes that can be fixed without human judgement (safe for "fix all"). */
+export const SAFE_FIXES = new Set(['ref', 'swapped-sex', 'empty-family']);
+/** Codes with a one-click fix that needs confirmation per issue. */
+export const FIX_LABEL = { ref: 'Usuń zerwane powiązania', 'swapped-sex': 'Zamień role w rodzinie', 'empty-family': 'Usuń pustą rodzinę', 'death-before-birth': 'Zamień daty urodzenia i śmierci' };
+export const canFix = (i) => i.code in FIX_LABEL;
+
+/** Drop references to persons/families that do not exist. Returns number of removed references. */
+export function repairRefs(model) {
+  let n = 0;
+  for (const f of Object.values(model.families)) {
+    for (const r of ['husband', 'wife']) if (f[r] && !model.persons[f[r]]) { f[r] = ''; n++; }
+    const before = f.children.length; f.children = f.children.filter((c) => model.persons[c]); n += before - f.children.length;
+  }
+  for (const p of Object.values(model.persons)) {
+    for (const k of ['famc', 'fams']) { const before = p[k].length; p[k] = p[k].filter((x) => model.families[x]); n += before - p[k].length; }
+  }
+  return n;
+}
+
+const familiesOf = (model, ids) => Object.values(model.families).filter((f) => ids.every((id) => f.husband === id || f.wife === id));
+
+/** Apply the fix for one issue. Returns true if something changed. */
+export function fixIssue(model, issue) {
+  const P = model.persons;
+  switch (issue.code) {
+    case 'ref': return repairRefs(model) > 0;
+    case 'swapped-sex': {
+      let ch = false;
+      for (const f of familiesOf(model, issue.ids)) if (P[f.husband]?.sex === 'F' && P[f.wife]?.sex === 'M') { [f.husband, f.wife] = [f.wife, f.husband]; ch = true; }
+      return ch;
+    }
+    case 'empty-family': {
+      let ch = false;
+      for (const f of Object.values(model.families)) {
+        const members = [f.husband, f.wife].filter(Boolean);
+        if (f.children.length || members.length !== 1 || members[0] !== issue.ids[0]) continue;
+        delete model.families[f.id]; ch = true;
+        for (const p of Object.values(P)) { p.fams = p.fams.filter((x) => x !== f.id); p.famc = p.famc.filter((x) => x !== f.id); }
+      }
+      return ch;
+    }
+    case 'death-before-birth': {
+      const p = P[issue.ids[0]]; if (!p) return false;
+      [p.birth.date, p.death.date] = [p.death.date, p.birth.date]; return true;
+    }
+    default: return false;
+  }
+}
+
+/** Fix every issue whose code is in SAFE_FIXES. Returns number of fixed issues. */
+export function fixAllSafe(model, issues) {
+  let n = 0;
+  for (const i of issues) if (SAFE_FIXES.has(i.code) && fixIssue(model, i)) n++;
+  return n;
 }

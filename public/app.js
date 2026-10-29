@@ -4,7 +4,7 @@ import { emptyModel, addPerson, addSpouse, addChild, addParent, parentsOf, child
 import { formatDate, formatLong, toGedcomDate, yearOf } from './dates.js';
 import { fold, lifeStatus, isLiving, mergePersons, anonymizeLiving, toCsv } from './ops.js';
 import { computeStats, upcomingBirthdays } from './stats.js';
-import { runChecks } from './checks.js';
+import { runChecks, canFix, fixIssue, fixAllSafe, SAFE_FIXES, FIX_LABEL } from './checks.js';
 import { relate } from './kin.js';
 import { $, el, avatar, bars, hist, stack, download, personLabel } from './ui.js';
 import { ensureExt } from './extras.js';
@@ -373,7 +373,16 @@ function viewChecks(main) {
   main.replaceChildren(el('div', { style: 'margin-top:.5rem' },
     el('h2', {}, 'Kontrola danych'),
     el('p', { class: 'mut' }, `Błędy: ${cnt('err')} · ostrzeżenia: ${cnt('warn')} · wskazówki: ${cnt('info')}. To podpowiedzi, nie wyroki: prawdziwe rodziny bywają nietypowe. „Ignoruj” ukrywa daną uwagę na stałe w tej przeglądarce.`),
-    (hidden > 0 || showIgnored) && el('p', {}, el('button', { class: 'sm', onclick: () => { showIgnored = !showIgnored; render(); } }, showIgnored ? 'Ukryj zignorowane' : `Pokaż zignorowane (${ignored.size})`)),
+    (() => {
+      const safe = all.filter((i) => SAFE_FIXES.has(i.code) && !ignored.has(issueKey(i)));
+      const tog = (hidden > 0 || showIgnored) && el('button', { class: 'sm', onclick: () => { showIgnored = !showIgnored; render(); } }, showIgnored ? 'Ukryj zignorowane' : `Pokaż zignorowane (${ignored.size})`);
+      const fixBtn = safe.length && el('button', { class: 'sm primary', title: 'Zerwane powiązania, zamienione role w rodzinie, puste rodziny', onclick: () => {
+        if (!confirm(`Naprawić automatycznie ${safe.length} ${safe.length === 1 ? 'uwagę' : 'uwag'}?\n(zerwane powiązania, zamienione role w rodzinie, puste rodziny)\nMożna cofnąć (Ctrl+Z).`)) return;
+        let n = 0; mutate(() => { n = fixAllSafe(model, safe); }); say(`Naprawiono: ${n}.`);
+      } }, `🛠 Napraw automatycznie (${safe.length})`);
+      return (fixBtn || tog) && el('p', { class: 'row' }, fixBtn, tog);
+    })(),
+    el('p', { class: 'mut' }, 'Uwagi z przyciskiem „Napraw” da się poprawić jednym kliknięciem. Pozostałe wymagają decyzji: kliknij osobę, żeby poprawić jej dane.'),
     !all.length && el('div', { class: 'card' }, '✓ Nic podejrzanego.'),
     ['err', 'warn', 'info'].map((sev) => {
       const list = all.filter((i) => i.sev === sev);
@@ -396,6 +405,12 @@ Zostaje pierwsza, jej brakujące dane zostaną uzupełnione. Można cofnąć (Ct
       mutate(() => mergePersons(model, a, b)); say('Scalono dwie osoby.');
     } }, 'Scal'));
   }
+  if (canFix(i)) row.append(el('button', { class: 'sm primary', title: FIX_LABEL[i.code], onclick: () => {
+    if (!SAFE_FIXES.has(i.code) && !confirm(`${FIX_LABEL[i.code]}?\n${i.text}\nMożna cofnąć (Ctrl+Z).`)) return;
+    let ok = false;
+    mutate(() => { ok = fixIssue(model, i); });
+    say(ok ? `Naprawiono: ${FIX_LABEL[i.code].toLowerCase()}.` : 'Nic do zmiany.');
+  } }, 'Napraw'));
   row.append(el('button', { class: 'sm ghost', onclick: () => { if (isIgn) ignored.delete(key); else ignored.add(key); saveIgnored(); refreshBadge(); render(); } }, isIgn ? 'Przywróć' : 'Ignoruj'));
   return row;
 }

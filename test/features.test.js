@@ -180,3 +180,23 @@ test('real file: stats, checks, anonymize are consistent (skipped when absent)',
   const { model } = anonymizeLiving(m, NOW);
   assert.deepEqual(validate(parseGedcom(serializeGedcom(model))), []);
 });
+
+test('checks: one-click repairs', async () => {
+  const { fixIssue, fixAllSafe } = await import('../public/checks.js');
+  const m = emptyModel();
+  const a = addPerson(m, { given: 'Anna', surname: 'X', sex: 'F' }), b = addPerson(m, { given: 'Bolek', surname: 'X', sex: 'M' });
+  addSpouse(m, a, b);
+  const f = Object.values(m.families)[0]; [f.husband, f.wife] = [a, b];
+  const lone = addPerson(m, { given: 'Lone', surname: 'Y', sex: 'M' });
+  m.families['@FX@'] = { id: '@FX@', husband: lone, wife: '', children: [], marriage: { date: '', place: '' } }; m.persons[lone].fams.push('@FX@');
+  m.persons[a].famc.push('@GONE@');
+  m.persons[b].birth.date = '1990'; m.persons[b].death.date = '1950';
+  let iss = runChecks(m, NOW);
+  for (const c of ['ref', 'swapped-sex', 'empty-family', 'death-before-birth']) assert.ok(iss.some((i) => i.code === c), c);
+  assert.equal(fixAllSafe(m, iss), 3);
+  assert.ok(fixIssue(m, runChecks(m, NOW).find((i) => i.code === 'death-before-birth')));
+  iss = runChecks(m, NOW);
+  for (const c of ['ref', 'swapped-sex', 'empty-family', 'death-before-birth']) assert.ok(!iss.some((i) => i.code === c), 'still ' + c);
+  assert.equal(f.husband, b); assert.equal(m.persons[b].birth.date, '1950');
+  assert.deepEqual(validate(m), []);
+});
